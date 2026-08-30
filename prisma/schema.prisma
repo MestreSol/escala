@@ -1,0 +1,148 @@
+// Prisma schema — Escala de Servidores do Altar
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum Prioridade {
+  ALTA
+  MEDIA
+  BAIXA
+}
+
+/// Grau/hierarquia do servidor. Quem tem um grau mais alto pode exercer as
+/// funções dos graus abaixo (Cerimoniário faz tudo que Acólito e Coroinha
+/// fazem; Acólito faz tudo que Coroinha faz). Ordem: COROINHA < ACOLITO <
+/// CERIMONIARIO.
+enum Grau {
+  COROINHA
+  ACOLITO
+  CERIMONIARIO
+}
+
+model Funcao {
+  id                 String     @id @default(cuid())
+  nome               String
+  prioridade         Prioridade
+  /// Grau mínimo exigido para exercer essa função (quem tem grau maior também pode).
+  grauMinimo         Grau
+  /// Quantidade padrão de vagas dessa função por missa (ex: Ceroferário = 2).
+  /// Usada como valor inicial ao configurar os requisitos de cada missa;
+  /// cada missa pode ajustar sua própria quantidade individualmente.
+  quantidadePadrao   Int        @default(1)
+  /// Se true, todas as vagas dessa função numa missa só são preenchidas se
+  /// houver gente para TODAS ao mesmo tempo; senão, todas ficam em aberto
+  /// (ex: Ceroferário sempre anda em dupla, não faz sentido só 1 dos 2).
+  exigeGrupoCompleto Boolean    @default(false)
+  ativo              Boolean    @default(true)
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+
+  missasRequisito MissaFuncaoRequisito[]
+  atribuicoes     EscalaAtribuicao[]
+
+  /// Funções extras que quem exerce esta função também pode assumir na mesma
+  /// missa, como último recurso (ex: Naveteiro pode assumir Sineta).
+  podeAssumir Funcao[] @relation("FuncaoAcumulacao")
+  /// Funções cujo ocupante pode assumir esta função como último recurso.
+  assumidaPor Funcao[] @relation("FuncaoAcumulacao")
+}
+
+model Missa {
+  id         String   @id @default(cuid())
+  diaSemana  Int
+  horario    String
+  comunidade String
+  ativo      Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  funcoesRequisito       MissaFuncaoRequisito[]
+  preferenciasServidores ServidorMissaPreferencia[]
+  ocorrencias            MissaOcorrencia[]
+}
+
+model MissaFuncaoRequisito {
+  id         String  @id @default(cuid())
+  missaId    String
+  funcaoId   String
+  quantidade Int     @default(1)
+  ativo      Boolean @default(true)
+
+  missa  Missa  @relation(fields: [missaId], references: [id], onDelete: Cascade)
+  funcao Funcao @relation(fields: [funcaoId], references: [id], onDelete: Cascade)
+
+  @@unique([missaId, funcaoId])
+}
+
+model Servidor {
+  id         String   @id @default(cuid())
+  nome       String
+  idade      Int
+  comunidade String
+  /// Grau do servidor. Determina quais funções ele pode exercer (o dele e os abaixo).
+  categoria  Grau
+  ativo      Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  preferenciasMissas ServidorMissaPreferencia[]
+  atribuicoes        EscalaAtribuicao[]
+}
+
+model ServidorMissaPreferencia {
+  id         String @id @default(cuid())
+  servidorId String
+  missaId    String
+
+  servidor Servidor @relation(fields: [servidorId], references: [id], onDelete: Cascade)
+  missa    Missa    @relation(fields: [missaId], references: [id], onDelete: Cascade)
+
+  @@unique([servidorId, missaId])
+}
+
+model MissaOcorrencia {
+  id        String   @id @default(cuid())
+  missaId   String
+  data      DateTime
+  createdAt DateTime @default(now())
+
+  missa       Missa              @relation(fields: [missaId], references: [id], onDelete: Cascade)
+  atribuicoes EscalaAtribuicao[]
+
+  @@unique([missaId, data])
+}
+
+model Escala {
+  id            String   @id @default(cuid())
+  periodoInicio DateTime
+  periodoFim    DateTime
+  geradaEm      DateTime @default(now())
+
+  atribuicoes EscalaAtribuicao[]
+}
+
+model EscalaAtribuicao {
+  id                    String   @id @default(cuid())
+  escalaId              String?
+  ocorrenciaId          String
+  funcaoId              String
+  slotIndex             Int      @default(1)
+  servidorId            String?
+  servidorNomeSnapshot  String?
+  geradoAutomaticamente Boolean  @default(true)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  escala     Escala?         @relation(fields: [escalaId], references: [id], onDelete: SetNull)
+  ocorrencia MissaOcorrencia @relation(fields: [ocorrenciaId], references: [id], onDelete: Cascade)
+  funcao     Funcao          @relation(fields: [funcaoId], references: [id], onDelete: Cascade)
+  servidor   Servidor?       @relation(fields: [servidorId], references: [id], onDelete: SetNull)
+
+  @@unique([ocorrenciaId, funcaoId, slotIndex])
+}
