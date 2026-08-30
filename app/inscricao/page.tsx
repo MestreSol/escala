@@ -2,6 +2,9 @@ import { prisma } from "@/lib/prisma";
 import { ServidorForm } from "@/components/ServidorForm";
 import { createServidor } from "./actions";
 
+// Lista de missas vem do banco e muda com o tempo — nunca deve ser congelada em build.
+export const dynamic = "force-dynamic";
+
 export default async function InscricaoPage() {
   const missas = await prisma.missa.findMany({
     where: { ativo: true },

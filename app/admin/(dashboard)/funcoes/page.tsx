@@ -12,6 +12,9 @@ const PRIORIDADE_COLOR: Record<string, "red" | "yellow" | "gray"> = {
   BAIXA: "gray",
 };
 
+// Página lê dados do banco a cada acesso — nunca deve ser congelada em build.
+export const dynamic = "force-dynamic";
+
 export default async function FuncoesPage() {
   const funcoes = await prisma.funcao.findMany({
     where: { ativo: true },

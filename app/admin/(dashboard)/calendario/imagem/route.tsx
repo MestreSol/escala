@@ -7,6 +7,8 @@ import { periodoDoMes } from "@/lib/occurrences";
 import { buscarEscalaDoPeriodo, type LinhaEscala } from "./data";
 
 export const runtime = "nodejs";
+// Lê dados do banco a cada acesso — nunca deve ser congelada em build.
+export const dynamic = "force-dynamic";
 
 const LARGURA = 900;
 const COR_TEXTO = "#111827";

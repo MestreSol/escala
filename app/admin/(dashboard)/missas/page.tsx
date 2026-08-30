@@ -5,6 +5,9 @@ import { DeleteButton } from "@/components/admin/DeleteButton";
 import { DIAS_SEMANA } from "@/lib/constants";
 import { deleteMissa } from "./actions";
 
+// Página lê dados do banco a cada acesso — nunca deve ser congelada em build.
+export const dynamic = "force-dynamic";
+
 export default async function MissasPage() {
   const missas = await prisma.missa.findMany({
     where: { ativo: true },

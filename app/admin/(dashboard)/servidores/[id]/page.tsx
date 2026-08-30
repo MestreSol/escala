@@ -3,6 +3,9 @@ import { prisma } from "@/lib/prisma";
 import { ServidorForm } from "@/components/ServidorForm";
 import { updateServidor } from "../actions";
 
+// Página lê dados do banco a cada acesso — nunca deve ser congelada em build.
+export const dynamic = "force-dynamic";
+
 export default async function EditarServidorPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const [servidor, missas] = await Promise.all([

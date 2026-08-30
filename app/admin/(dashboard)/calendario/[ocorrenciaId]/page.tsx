@@ -9,6 +9,9 @@ import { Select } from "@/components/ui/Field";
 import { DIAS_SEMANA } from "@/lib/constants";
 import { atualizarAtribuicaoManual } from "../actions";
 
+// Página lê dados do banco a cada acesso — nunca deve ser congelada em build.
+export const dynamic = "force-dynamic";
+
 export default async function OcorrenciaDetailPage({
   params,
 }: {

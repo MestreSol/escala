@@ -1,5 +1,8 @@
 import { prisma } from "@/lib/prisma";
 
+// Página lê dados do banco a cada acesso — nunca deve ser congelada em build.
+export const dynamic = "force-dynamic";
+
 export default async function AdminDashboardPage() {
   const [totalFuncoes, totalMissas, totalServidores] = await Promise.all([
     prisma.funcao.count({ where: { ativo: true } }),

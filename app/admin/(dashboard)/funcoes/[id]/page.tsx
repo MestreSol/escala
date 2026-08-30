@@ -4,6 +4,9 @@ import { FuncaoForm } from "@/components/admin/FuncaoForm";
 import { Button } from "@/components/ui/Button";
 import { updateFuncao, saveFuncaoAcumulacoes } from "../actions";
 
+// Página lê dados do banco a cada acesso — nunca deve ser congelada em build.
+export const dynamic = "force-dynamic";
+
 export default async function EditarFuncaoPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const [funcao, outrasFuncoes] = await Promise.all([
