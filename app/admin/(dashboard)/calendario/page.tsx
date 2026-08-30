@@ -10,10 +10,11 @@ import {
   subMonths,
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { prisma } from "@/lib/prisma";
+import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/Button";
 import { DeleteButton } from "@/components/admin/DeleteButton";
-import { periodoDoMes } from "@/lib/occurrences";
+import { periodoDoMes, paraExibicao, lerDataArmazenada } from "@/lib/occurrences";
+import type { EscalaAtribuicaoRow, MissaFuncaoRequisitoRow, MissaRow, MissaOcorrenciaRow } from "@/lib/types";
 import { materializarOcorrencias, gerarEscalaPeriodo, regenerarEscalaPeriodo } from "./actions";
 
 // Página lê e materializa dados do banco a cada acesso — nunca deve ser congelada em build.
@@ -26,26 +27,40 @@ export default async function CalendarioPage({
 }) {
   const { mes } = await searchParams;
   const { periodoInicio, periodoFim } = periodoDoMes(mes);
-  const mesReferencia = periodoInicio;
 
   await materializarOcorrencias(periodoInicio, periodoFim);
 
-  const [ocorrencias, requisitos] = await Promise.all([
-    prisma.missaOcorrencia.findMany({
-      where: { data: { gte: periodoInicio, lte: periodoFim } },
-      include: { missa: true, atribuicoes: true },
-      orderBy: { data: "asc" },
-    }),
-    prisma.missaFuncaoRequisito.findMany({ where: { ativo: true } }),
+  const [ocorrenciasResult, requisitosResult] = await Promise.all([
+    supabase
+      .from("MissaOcorrencia")
+      .select("*, missa:Missa(*), atribuicoes:EscalaAtribuicao(*)")
+      .gte("data", periodoInicio.toISOString())
+      .lte("data", periodoFim.toISOString())
+      .order("data", { ascending: true })
+      .returns<(MissaOcorrenciaRow & { missa: MissaRow; atribuicoes: EscalaAtribuicaoRow[] })[]>(),
+    supabase.from("MissaFuncaoRequisito").select("*").eq("ativo", true).returns<MissaFuncaoRequisitoRow[]>(),
   ]);
+  if (ocorrenciasResult.error) throw ocorrenciasResult.error;
+  if (requisitosResult.error) throw requisitosResult.error;
+
+  // As datas vêm "ancoradas em UTC" (ver lib/occurrences.ts); convertidas
+  // aqui para exibição, para que format()/isSameDay() (que usam o fuso
+  // local do processo) mostrem o horário de missa certo em qualquer fuso.
+  const ocorrencias = (ocorrenciasResult.data ?? []).map((o) => ({
+    ...o,
+    dataExibicao: paraExibicao(lerDataArmazenada(o.data)),
+  }));
+  const requisitos = requisitosResult.data ?? [];
 
   const totalSlotsPorMissa = new Map<string, number>();
   for (const req of requisitos) {
     totalSlotsPorMissa.set(req.missaId, (totalSlotsPorMissa.get(req.missaId) ?? 0) + req.quantidade);
   }
 
-  const gridInicio = startOfWeek(periodoInicio, { weekStartsOn: 0 });
-  const gridFim = endOfWeek(periodoFim, { weekStartsOn: 0 });
+  const mesReferencia = paraExibicao(periodoInicio);
+  const periodoFimExibicao = paraExibicao(periodoFim);
+  const gridInicio = startOfWeek(mesReferencia, { weekStartsOn: 0 });
+  const gridFim = endOfWeek(periodoFimExibicao, { weekStartsOn: 0 });
   const dias = eachDayOfInterval({ start: gridInicio, end: gridFim });
 
   const mesAtualParam = format(mesReferencia, "yyyy-MM");
@@ -93,7 +108,7 @@ export default async function CalendarioPage({
         ))}
 
         {dias.map((dia) => {
-          const ocorrenciasDoDia = ocorrencias.filter((o) => isSameDay(o.data, dia));
+          const ocorrenciasDoDia = ocorrencias.filter((o) => isSameDay(o.dataExibicao, dia));
           const foraDoMes = !isSameMonth(dia, mesReferencia);
 
           return (
@@ -121,9 +136,9 @@ export default async function CalendarioPage({
                       key={ocorrencia.id}
                       href={`/admin/calendario/${ocorrencia.id}`}
                       className={`block truncate rounded px-1.5 py-1 text-[11px] font-medium ${cor}`}
-                      title={`${ocorrencia.missa.comunidade} — ${format(ocorrencia.data, "HH:mm")}`}
+                      title={`${ocorrencia.missa.comunidade} — ${format(ocorrencia.dataExibicao, "HH:mm")}`}
                     >
-                      {format(ocorrencia.data, "HH:mm")} {ocorrencia.missa.comunidade}
+                      {format(ocorrencia.dataExibicao, "HH:mm")} {ocorrencia.missa.comunidade}
                       {total > 0 ? ` (${preenchidas}/${total})` : ""}
                     </Link>
                   );

@@ -1,7 +1,9 @@
 import { notFound } from "next/navigation";
-import { prisma } from "@/lib/prisma";
+import { supabase } from "@/lib/supabase";
 import { FuncaoForm } from "@/components/admin/FuncaoForm";
 import { Button } from "@/components/ui/Button";
+import { getFuncoesQuePodeAssumir } from "@/lib/funcaoAcumulacao";
+import type { FuncaoRow } from "@/lib/types";
 import { updateFuncao, saveFuncaoAcumulacoes } from "../actions";
 
 // Página lê dados do banco a cada acesso — nunca deve ser congelada em build.
@@ -9,16 +11,30 @@ export const dynamic = "force-dynamic";
 
 export default async function EditarFuncaoPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [funcao, outrasFuncoes] = await Promise.all([
-    prisma.funcao.findUnique({ where: { id }, include: { podeAssumir: true } }),
-    prisma.funcao.findMany({ where: { ativo: true, id: { not: id } }, orderBy: { nome: "asc" } }),
+
+  const [funcaoResult, outrasFuncoesResult, podeAssumirIdsLista] = await Promise.all([
+    supabase.from("Funcao").select("*").eq("id", id).returns<FuncaoRow[]>().maybeSingle(),
+    supabase
+      .from("Funcao")
+      .select("id, nome")
+      .eq("ativo", true)
+      .neq("id", id)
+      .order("nome", { ascending: true })
+      .returns<{ id: string; nome: string }[]>(),
+    getFuncoesQuePodeAssumir(id),
   ]);
+
+  if (funcaoResult.error) throw funcaoResult.error;
+  if (outrasFuncoesResult.error) throw outrasFuncoesResult.error;
+
+  const funcao = funcaoResult.data;
+  const outrasFuncoes = outrasFuncoesResult.data ?? [];
 
   if (!funcao) notFound();
 
   const action = updateFuncao.bind(null, funcao.id);
   const salvarAcumulacoes = saveFuncaoAcumulacoes.bind(null, funcao.id);
-  const podeAssumirIds = new Set(funcao.podeAssumir.map((f) => f.id));
+  const podeAssumirIds = new Set(podeAssumirIdsLista);
 
   return (
     <div className="max-w-2xl space-y-10">

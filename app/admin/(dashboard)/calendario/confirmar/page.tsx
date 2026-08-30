@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { periodoDoMes } from "@/lib/occurrences";
+import { periodoDoMes, paraExibicao } from "@/lib/occurrences";
 
 function capitalizar(texto: string) {
   return texto.charAt(0).toUpperCase() + texto.slice(1);
@@ -14,8 +14,9 @@ export default async function ConfirmarEscalaPage({
 }) {
   const { mes } = await searchParams;
   const { periodoInicio } = periodoDoMes(mes);
-  const mesParam = format(periodoInicio, "yyyy-MM");
-  const mesLabel = capitalizar(format(periodoInicio, "MMMM 'de' yyyy", { locale: ptBR }));
+  const mesReferencia = paraExibicao(periodoInicio);
+  const mesParam = format(mesReferencia, "yyyy-MM");
+  const mesLabel = capitalizar(format(mesReferencia, "MMMM 'de' yyyy", { locale: ptBR }));
 
   const urlCompleta = `/admin/calendario/imagem?mes=${mesParam}&variante=completa`;
   const urlNomes = `/admin/calendario/imagem?mes=${mesParam}&variante=nomes`;

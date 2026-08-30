@@ -3,7 +3,7 @@ import path from "node:path";
 import { ImageResponse } from "next/og";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { periodoDoMes } from "@/lib/occurrences";
+import { periodoDoMes, paraExibicao } from "@/lib/occurrences";
 import { buscarEscalaDoPeriodo, type LinhaEscala } from "./data";
 
 export const runtime = "nodejs";
@@ -41,7 +41,7 @@ export async function GET(request: Request) {
   const ocorrencias = await buscarEscalaDoPeriodo(periodoInicio, periodoFim);
   const fonts = await carregarFontes();
 
-  const tituloMes = capitalizar(format(periodoInicio, "MMMM 'de' yyyy", { locale: ptBR }));
+  const tituloMes = capitalizar(format(paraExibicao(periodoInicio), "MMMM 'de' yyyy", { locale: ptBR }));
 
   let altura = 140;
   for (const ocorrencia of ocorrencias) {

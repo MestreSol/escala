@@ -1,10 +1,11 @@
 import { notFound } from "next/navigation";
-import { prisma } from "@/lib/prisma";
+import { supabase } from "@/lib/supabase";
 import { MissaForm } from "@/components/admin/MissaForm";
 import { DeleteButton } from "@/components/admin/DeleteButton";
 import { Input } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import { PRIORIDADE_LABEL, GRAU_LABEL } from "@/lib/constants";
+import type { FuncaoRow, MissaFuncaoRequisitoRow, MissaRow } from "@/lib/types";
 import { updateMissa, deleteMissa, saveMissaRequisitos } from "../actions";
 
 // Página lê dados do banco a cada acesso — nunca deve ser congelada em build.
@@ -12,17 +13,27 @@ export const dynamic = "force-dynamic";
 
 export default async function EditarMissaPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [missa, funcoes] = await Promise.all([
-    prisma.missa.findUnique({
-      where: { id },
-      include: { funcoesRequisito: true },
-    }),
-    prisma.funcao.findMany({ where: { ativo: true }, orderBy: { nome: "asc" } }),
+
+  const [missaResult, requisitosResult, funcoesResult] = await Promise.all([
+    supabase.from("Missa").select("*").eq("id", id).returns<MissaRow[]>().maybeSingle(),
+    supabase
+      .from("MissaFuncaoRequisito")
+      .select("*")
+      .eq("missaId", id)
+      .returns<MissaFuncaoRequisitoRow[]>(),
+    supabase.from("Funcao").select("*").eq("ativo", true).order("nome", { ascending: true }).returns<FuncaoRow[]>(),
   ]);
+
+  if (missaResult.error) throw missaResult.error;
+  if (requisitosResult.error) throw requisitosResult.error;
+  if (funcoesResult.error) throw funcoesResult.error;
+
+  const missa = missaResult.data;
+  const funcoes = funcoesResult.data ?? [];
 
   if (!missa) notFound();
 
-  const requisitoPorFuncao = new Map(missa.funcoesRequisito.map((r) => [r.funcaoId, r]));
+  const requisitoPorFuncao = new Map((requisitosResult.data ?? []).map((r) => [r.funcaoId, r]));
   const salvarRequisitos = saveMissaRequisitos.bind(null, missa.id);
 
   return (

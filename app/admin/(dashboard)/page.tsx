@@ -1,14 +1,18 @@
-import { prisma } from "@/lib/prisma";
+import { supabase } from "@/lib/supabase";
 
 // Página lê dados do banco a cada acesso — nunca deve ser congelada em build.
 export const dynamic = "force-dynamic";
 
 export default async function AdminDashboardPage() {
-  const [totalFuncoes, totalMissas, totalServidores] = await Promise.all([
-    prisma.funcao.count({ where: { ativo: true } }),
-    prisma.missa.count({ where: { ativo: true } }),
-    prisma.servidor.count({ where: { ativo: true } }),
+  const [funcoes, missas, servidores] = await Promise.all([
+    supabase.from("Funcao").select("id", { count: "exact", head: true }).eq("ativo", true),
+    supabase.from("Missa").select("id", { count: "exact", head: true }).eq("ativo", true),
+    supabase.from("Servidor").select("id", { count: "exact", head: true }).eq("ativo", true),
   ]);
+
+  const totalFuncoes = funcoes.count ?? 0;
+  const totalMissas = missas.count ?? 0;
+  const totalServidores = servidores.count ?? 0;
 
   const cards = [
     { label: "Funções ativas", value: totalFuncoes, href: "/admin/funcoes" },

@@ -1,15 +1,21 @@
-import { prisma } from "@/lib/prisma";
+import { supabase } from "@/lib/supabase";
 import { ServidorForm } from "@/components/ServidorForm";
+import type { MissaOption } from "@/lib/types";
 import { createServidor } from "./actions";
 
 // Lista de missas vem do banco e muda com o tempo — nunca deve ser congelada em build.
 export const dynamic = "force-dynamic";
 
 export default async function InscricaoPage() {
-  const missas = await prisma.missa.findMany({
-    where: { ativo: true },
-    orderBy: [{ diaSemana: "asc" }, { horario: "asc" }],
-  });
+  const { data, error } = await supabase
+    .from("Missa")
+    .select("*")
+    .eq("ativo", true)
+    .order("diaSemana", { ascending: true })
+    .order("horario", { ascending: true })
+    .returns<MissaOption[]>();
+  if (error) throw error;
+  const missas = data ?? [];
 
   return (
     <div className="min-h-screen bg-gray-50 px-4 py-12">

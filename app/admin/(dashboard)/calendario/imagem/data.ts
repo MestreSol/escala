@@ -1,5 +1,7 @@
-import { prisma } from "@/lib/prisma";
+import { supabase } from "@/lib/supabase";
 import { PRIORIDADE_ORDEM } from "@/lib/constants";
+import { lerDataArmazenada, paraExibicao } from "@/lib/occurrences";
+import type { EscalaAtribuicaoRow, FuncaoRow, MissaOcorrenciaRow, MissaRow, ServidorRow } from "@/lib/types";
 
 export type LinhaEscala = {
   funcaoNome: string;
@@ -15,17 +17,22 @@ export type OcorrenciaEscala = {
   linhas: LinhaEscala[];
 };
 
-export async function buscarEscalaDoPeriodo(periodoInicio: Date, periodoFim: Date): Promise<OcorrenciaEscala[]> {
-  const ocorrencias = await prisma.missaOcorrencia.findMany({
-    where: { data: { gte: periodoInicio, lte: periodoFim } },
-    include: {
-      missa: true,
-      atribuicoes: { include: { funcao: true, servidor: true } },
-    },
-    orderBy: { data: "asc" },
-  });
+type OcorrenciaComAtribuicoes = MissaOcorrenciaRow & {
+  missa: MissaRow;
+  atribuicoes: (EscalaAtribuicaoRow & { funcao: FuncaoRow; servidor: ServidorRow | null })[];
+};
 
-  return ocorrencias.map((ocorrencia) => {
+export async function buscarEscalaDoPeriodo(periodoInicio: Date, periodoFim: Date): Promise<OcorrenciaEscala[]> {
+  const { data, error } = await supabase
+    .from("MissaOcorrencia")
+    .select("*, missa:Missa(*), atribuicoes:EscalaAtribuicao(*, funcao:Funcao(*), servidor:Servidor(*))")
+    .gte("data", periodoInicio.toISOString())
+    .lte("data", periodoFim.toISOString())
+    .order("data", { ascending: true })
+    .returns<OcorrenciaComAtribuicoes[]>();
+  if (error) throw error;
+
+  return (data ?? []).map((ocorrencia) => {
     const totalPorFuncao = new Map<string, number>();
     for (const a of ocorrencia.atribuicoes) {
       totalPorFuncao.set(a.funcaoId, (totalPorFuncao.get(a.funcaoId) ?? 0) + 1);
@@ -54,7 +61,7 @@ export async function buscarEscalaDoPeriodo(periodoInicio: Date, periodoFim: Dat
 
     return {
       id: ocorrencia.id,
-      data: ocorrencia.data,
+      data: paraExibicao(lerDataArmazenada(ocorrencia.data)),
       comunidade: ocorrencia.missa.comunidade,
       linhas,
     };

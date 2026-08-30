@@ -2,15 +2,29 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { prisma } from "@/lib/prisma";
+import { supabase } from "@/lib/supabase";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Field";
 import { DIAS_SEMANA } from "@/lib/constants";
+import { lerDataArmazenada, paraExibicao } from "@/lib/occurrences";
+import type {
+  EscalaAtribuicaoRow,
+  FuncaoRow,
+  MissaFuncaoRequisitoRow,
+  MissaOcorrenciaRow,
+  MissaRow,
+  ServidorRow,
+} from "@/lib/types";
 import { atualizarAtribuicaoManual } from "../actions";
 
 // Página lê dados do banco a cada acesso — nunca deve ser congelada em build.
 export const dynamic = "force-dynamic";
+
+type OcorrenciaComDetalhes = MissaOcorrenciaRow & {
+  missa: MissaRow & { funcoesRequisito: (MissaFuncaoRequisitoRow & { funcao: FuncaoRow })[] };
+  atribuicoes: (EscalaAtribuicaoRow & { servidor: ServidorRow | null })[];
+};
 
 export default async function OcorrenciaDetailPage({
   params,
@@ -19,16 +33,23 @@ export default async function OcorrenciaDetailPage({
 }) {
   const { ocorrenciaId } = await params;
 
-  const [ocorrencia, servidores] = await Promise.all([
-    prisma.missaOcorrencia.findUnique({
-      where: { id: ocorrenciaId },
-      include: {
-        missa: { include: { funcoesRequisito: { where: { ativo: true }, include: { funcao: true } } } },
-        atribuicoes: { include: { funcao: true, servidor: true } },
-      },
-    }),
-    prisma.servidor.findMany({ where: { ativo: true }, orderBy: { nome: "asc" } }),
+  const [ocorrenciaResult, servidoresResult] = await Promise.all([
+    supabase
+      .from("MissaOcorrencia")
+      .select(
+        "*, missa:Missa(*, funcoesRequisito:MissaFuncaoRequisito(*, funcao:Funcao(*))), atribuicoes:EscalaAtribuicao(*, servidor:Servidor(*))"
+      )
+      .eq("id", ocorrenciaId)
+      .returns<OcorrenciaComDetalhes[]>()
+      .maybeSingle(),
+    supabase.from("Servidor").select("*").eq("ativo", true).order("nome", { ascending: true }).returns<ServidorRow[]>(),
   ]);
+
+  if (ocorrenciaResult.error) throw ocorrenciaResult.error;
+  if (servidoresResult.error) throw servidoresResult.error;
+
+  const ocorrencia = ocorrenciaResult.data;
+  const servidores = servidoresResult.data ?? [];
 
   if (!ocorrencia) notFound();
 
@@ -36,23 +57,26 @@ export default async function OcorrenciaDetailPage({
     ocorrencia.atribuicoes.map((a) => [`${a.funcaoId}:${a.slotIndex}`, a])
   );
 
-  const linhas = ocorrencia.missa.funcoesRequisito.flatMap((req) =>
-    Array.from({ length: req.quantidade }, (_, i) => {
-      const slotIndex = i + 1;
-      const atribuicao = atribuicaoPorSlot.get(`${req.funcaoId}:${slotIndex}`);
-      return {
-        funcaoId: req.funcaoId,
-        funcaoNome: req.funcao.nome,
-        slotIndex,
-        totalSlots: req.quantidade,
-        servidorId: atribuicao?.servidorId ?? null,
-        servidorNome: atribuicao?.servidorNomeSnapshot ?? atribuicao?.servidor?.nome ?? null,
-        gerado: Boolean(atribuicao),
-      };
-    })
-  );
+  const linhas = ocorrencia.missa.funcoesRequisito
+    .filter((req) => req.ativo)
+    .flatMap((req) =>
+      Array.from({ length: req.quantidade }, (_, i) => {
+        const slotIndex = i + 1;
+        const atribuicao = atribuicaoPorSlot.get(`${req.funcaoId}:${slotIndex}`);
+        return {
+          funcaoId: req.funcaoId,
+          funcaoNome: req.funcao.nome,
+          slotIndex,
+          totalSlots: req.quantidade,
+          servidorId: atribuicao?.servidorId ?? null,
+          servidorNome: atribuicao?.servidorNomeSnapshot ?? atribuicao?.servidor?.nome ?? null,
+          gerado: Boolean(atribuicao),
+        };
+      })
+    );
 
-  const mesAno = format(ocorrencia.data, "eeee, d 'de' MMMM 'de' yyyy", { locale: ptBR });
+  const dataOcorrencia = paraExibicao(lerDataArmazenada(ocorrencia.data));
+  const mesAno = format(dataOcorrencia, "eeee, d 'de' MMMM 'de' yyyy", { locale: ptBR });
 
   return (
     <div className="max-w-2xl">
@@ -60,7 +84,7 @@ export default async function OcorrenciaDetailPage({
         ← Voltar ao calendário
       </Link>
       <h1 className="text-2xl font-semibold capitalize text-gray-900">
-        {DIAS_SEMANA[ocorrencia.missa.diaSemana]} — {format(ocorrencia.data, "HH:mm")}
+        {DIAS_SEMANA[ocorrencia.missa.diaSemana]} — {format(dataOcorrencia, "HH:mm")}
       </h1>
       <p className="mb-1 text-sm text-gray-500 capitalize">{mesAno}</p>
       <p className="mb-6 text-sm text-gray-500">Comunidade: {ocorrencia.missa.comunidade}</p>

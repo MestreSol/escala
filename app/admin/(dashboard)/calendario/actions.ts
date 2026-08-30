@@ -1,60 +1,88 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { prisma } from "@/lib/prisma";
-import { gerarDatasOcorrencia, combinarDataHorario } from "@/lib/occurrences";
+import { supabase } from "@/lib/supabase";
+import { generateId, nowIso } from "@/lib/db";
+import { getAcumulacoesMap } from "@/lib/funcaoAcumulacao";
+import { gerarDatasOcorrencia, combinarDataHorario, lerDataArmazenada } from "@/lib/occurrences";
 import { gerarEscala, type SlotParaPreencher, type ServidorCandidato } from "@/lib/scheduleGenerator";
+import type {
+  EscalaAtribuicaoRow,
+  FuncaoRow,
+  MissaFuncaoRequisitoRow,
+  MissaRow,
+  ServidorMissaPreferenciaRow,
+  ServidorRow,
+} from "@/lib/types";
 
 export async function materializarOcorrencias(periodoInicio: Date, periodoFim: Date) {
-  const missas = await prisma.missa.findMany({ where: { ativo: true } });
+  const { data: missas, error: missasError } = await supabase
+    .from("Missa")
+    .select("*")
+    .eq("ativo", true)
+    .returns<MissaRow[]>();
+  if (missasError) throw missasError;
 
-  const linhas = missas.flatMap((missa) =>
+  const linhas = (missas ?? []).flatMap((missa) =>
     gerarDatasOcorrencia(missa.diaSemana, periodoInicio, periodoFim).map((data) => ({
+      id: generateId(),
       missaId: missa.id,
-      data: combinarDataHorario(data, missa.horario),
+      data: combinarDataHorario(data, missa.horario).toISOString(),
     }))
   );
 
   if (linhas.length === 0) return;
 
-  await prisma.$transaction(
-    linhas.map((linha) =>
-      prisma.missaOcorrencia.upsert({
-        where: { missaId_data: { missaId: linha.missaId, data: linha.data } },
-        update: {},
-        create: linha,
-      })
-    )
-  );
+  // Só insere quem ainda não existe (ON CONFLICT DO NOTHING) — não há campo
+  // para atualizar aqui, e preserva o id (e portanto as atribuições já
+  // vinculadas) das ocorrências que já existiam.
+  const { error } = await supabase
+    .from("MissaOcorrencia")
+    .upsert(linhas, { onConflict: "missaId,data", ignoreDuplicates: true });
+  if (error) throw error;
 }
 
 async function montarSlotsEmAberto(periodoInicio: Date, periodoFim: Date) {
-  const [ocorrencias, requisitos] = await Promise.all([
-    prisma.missaOcorrencia.findMany({
-      where: { data: { gte: periodoInicio, lte: periodoFim } },
-    }),
-    prisma.missaFuncaoRequisito.findMany({
-      where: { ativo: true },
-      include: { funcao: true },
-    }),
-  ]);
+  const { data: ocorrencias, error: ocorrenciasError } = await supabase
+    .from("MissaOcorrencia")
+    .select("id, missaId, data")
+    .gte("data", periodoInicio.toISOString())
+    .lte("data", periodoFim.toISOString())
+    .returns<{ id: string; missaId: string; data: string }[]>();
+  if (ocorrenciasError) throw ocorrenciasError;
 
-  const requisitosPorMissa = new Map<string, typeof requisitos>();
-  for (const requisito of requisitos) {
-    const lista = requisitosPorMissa.get(requisito.missaId) ?? [];
-    lista.push(requisito);
-    requisitosPorMissa.set(requisito.missaId, lista);
+  const { data: requisitos, error: requisitosError } = await supabase
+    .from("MissaFuncaoRequisito")
+    .select("*, funcao:Funcao(*)")
+    .eq("ativo", true)
+    .returns<(MissaFuncaoRequisitoRow & { funcao: FuncaoRow })[]>();
+  if (requisitosError) throw requisitosError;
+
+  const requisitosPorMissa = new Map<string, (MissaFuncaoRequisitoRow & { funcao: FuncaoRow })[]>();
+  for (const requisito of requisitos ?? []) {
+    const lista = requisitosPorMissa.get(requisito.missaId);
+    if (lista) lista.push(requisito);
+    else requisitosPorMissa.set(requisito.missaId, [requisito]);
   }
 
-  const atribuicoesExistentes = await prisma.escalaAtribuicao.findMany({
-    where: { ocorrenciaId: { in: ocorrencias.map((o) => o.id) } },
-  });
+  const ocorrenciaIds = (ocorrencias ?? []).map((o) => o.id);
+  let atribuicoesExistentes: EscalaAtribuicaoRow[] = [];
+  if (ocorrenciaIds.length > 0) {
+    const { data, error } = await supabase
+      .from("EscalaAtribuicao")
+      .select("*")
+      .in("ocorrenciaId", ocorrenciaIds)
+      .returns<EscalaAtribuicaoRow[]>();
+    if (error) throw error;
+    atribuicoesExistentes = data ?? [];
+  }
+
   const existentesSet = new Set(
     atribuicoesExistentes.map((a) => `${a.ocorrenciaId}:${a.funcaoId}:${a.slotIndex}`)
   );
 
   const slots: SlotParaPreencher[] = [];
-  for (const ocorrencia of ocorrencias) {
+  for (const ocorrencia of ocorrencias ?? []) {
     const reqs = requisitosPorMissa.get(ocorrencia.missaId) ?? [];
     for (const req of reqs) {
       for (let slotIndex = 1; slotIndex <= req.quantidade; slotIndex++) {
@@ -63,7 +91,7 @@ async function montarSlotsEmAberto(periodoInicio: Date, periodoFim: Date) {
         slots.push({
           ocorrenciaId: ocorrencia.id,
           missaId: ocorrencia.missaId,
-          data: ocorrencia.data,
+          data: lerDataArmazenada(ocorrencia.data),
           funcaoId: req.funcaoId,
           grauMinimo: req.funcao.grauMinimo,
           prioridade: req.funcao.prioridade,
@@ -89,12 +117,14 @@ export async function gerarEscalaPeriodo(periodoInicioISO: string, periodoFimISO
     return;
   }
 
-  const servidoresDb = await prisma.servidor.findMany({
-    where: { ativo: true },
-    include: { preferenciasMissas: true },
-  });
+  const { data: servidoresDb, error: servidoresError } = await supabase
+    .from("Servidor")
+    .select("*, preferenciasMissas:ServidorMissaPreferencia(*)")
+    .eq("ativo", true)
+    .returns<(ServidorRow & { preferenciasMissas: ServidorMissaPreferenciaRow[] })[]>();
+  if (servidoresError) throw servidoresError;
 
-  const servidores: ServidorCandidato[] = servidoresDb.map((s) => ({
+  const servidores: ServidorCandidato[] = (servidoresDb ?? []).map((s) => ({
     id: s.id,
     categoria: s.categoria,
     missaIdsPreferidas: new Set(s.preferenciasMissas.map((p) => p.missaId)),
@@ -107,19 +137,15 @@ export async function gerarEscalaPeriodo(periodoInicioISO: string, periodoFimISO
     }
   }
 
-  const funcoesComAcumulacao = await prisma.funcao.findMany({
-    where: { assumidaPor: { some: {} } },
-    select: { id: true, assumidaPor: { select: { id: true } } },
-  });
-  const acumulacoes = new Map<string, string[]>(
-    funcoesComAcumulacao.map((f) => [f.id, f.assumidaPor.map((base) => base.id)])
-  );
+  const acumulacoes = await getAcumulacoesMap();
 
-  const funcoesAtomicasDb = await prisma.funcao.findMany({
-    where: { exigeGrupoCompleto: true },
-    select: { id: true },
-  });
-  const funcoesAtomicas = new Set(funcoesAtomicasDb.map((f) => f.id));
+  const { data: funcoesAtomicasDb, error: atomicasError } = await supabase
+    .from("Funcao")
+    .select("id")
+    .eq("exigeGrupoCompleto", true)
+    .returns<{ id: string }[]>();
+  if (atomicasError) throw atomicasError;
+  const funcoesAtomicas = new Set((funcoesAtomicasDb ?? []).map((f) => f.id));
 
   const resultado = gerarEscala(slots, servidores, {
     contagemInicial,
@@ -128,24 +154,30 @@ export async function gerarEscalaPeriodo(periodoInicioISO: string, periodoFimISO
     atribuicoesExistentes,
   });
 
-  const escala = await prisma.escala.create({ data: { periodoInicio, periodoFim } });
-  const servidorPorId = new Map(servidoresDb.map((s) => [s.id, s]));
+  const escalaId = generateId();
+  const { error: escalaError } = await supabase.from("Escala").insert({
+    id: escalaId,
+    periodoInicio: periodoInicio.toISOString(),
+    periodoFim: periodoFim.toISOString(),
+  });
+  if (escalaError) throw escalaError;
 
-  await prisma.$transaction(
-    resultado.map((r) =>
-      prisma.escalaAtribuicao.create({
-        data: {
-          escalaId: escala.id,
-          ocorrenciaId: r.ocorrenciaId,
-          funcaoId: r.funcaoId,
-          slotIndex: r.slotIndex,
-          servidorId: r.servidorId,
-          servidorNomeSnapshot: r.servidorId ? servidorPorId.get(r.servidorId)?.nome : null,
-          geradoAutomaticamente: true,
-        },
-      })
-    )
-  );
+  const servidorPorId = new Map((servidoresDb ?? []).map((s) => [s.id, s]));
+
+  const rows = resultado.map((r) => ({
+    id: generateId(),
+    escalaId,
+    ocorrenciaId: r.ocorrenciaId,
+    funcaoId: r.funcaoId,
+    slotIndex: r.slotIndex,
+    servidorId: r.servidorId,
+    servidorNomeSnapshot: r.servidorId ? (servidorPorId.get(r.servidorId)?.nome ?? null) : null,
+    geradoAutomaticamente: true,
+    updatedAt: nowIso(),
+  }));
+
+  const { error: insertError } = await supabase.from("EscalaAtribuicao").insert(rows);
+  if (insertError) throw insertError;
 
   revalidatePath("/admin/calendario");
 }
@@ -160,15 +192,40 @@ export async function atualizarAtribuicaoManual(
 
   let servidorNomeSnapshot: string | null = null;
   if (servidorId) {
-    const servidor = await prisma.servidor.findUnique({ where: { id: servidorId }, select: { nome: true } });
+    const { data: servidor, error } = await supabase
+      .from("Servidor")
+      .select("nome")
+      .eq("id", servidorId)
+      .returns<{ nome: string }[]>()
+      .maybeSingle();
+    if (error) throw error;
     servidorNomeSnapshot = servidor?.nome ?? null;
   }
 
-  await prisma.escalaAtribuicao.upsert({
-    where: { ocorrenciaId_funcaoId_slotIndex: { ocorrenciaId, funcaoId, slotIndex } },
-    update: { servidorId, servidorNomeSnapshot, geradoAutomaticamente: false },
-    create: { ocorrenciaId, funcaoId, slotIndex, servidorId, servidorNomeSnapshot, geradoAutomaticamente: false },
-  });
+  const { data: existente, error: existenteError } = await supabase
+    .from("EscalaAtribuicao")
+    .select("id")
+    .eq("ocorrenciaId", ocorrenciaId)
+    .eq("funcaoId", funcaoId)
+    .eq("slotIndex", slotIndex)
+    .returns<{ id: string }[]>()
+    .maybeSingle();
+  if (existenteError) throw existenteError;
+
+  const { error } = await supabase.from("EscalaAtribuicao").upsert(
+    {
+      id: existente?.id ?? generateId(),
+      ocorrenciaId,
+      funcaoId,
+      slotIndex,
+      servidorId,
+      servidorNomeSnapshot,
+      geradoAutomaticamente: false,
+      updatedAt: nowIso(),
+    },
+    { onConflict: "ocorrenciaId,funcaoId,slotIndex" }
+  );
+  if (error) throw error;
 
   revalidatePath(`/admin/calendario/${ocorrenciaId}`);
   revalidatePath("/admin/calendario");
@@ -180,17 +237,23 @@ export async function regenerarEscalaPeriodo(periodoInicioISO: string, periodoFi
 
   await materializarOcorrencias(periodoInicio, periodoFim);
 
-  const ocorrencias = await prisma.missaOcorrencia.findMany({
-    where: { data: { gte: periodoInicio, lte: periodoFim } },
-    select: { id: true },
-  });
+  const { data: ocorrencias, error } = await supabase
+    .from("MissaOcorrencia")
+    .select("id")
+    .gte("data", periodoInicio.toISOString())
+    .lte("data", periodoFim.toISOString())
+    .returns<{ id: string }[]>();
+  if (error) throw error;
 
-  await prisma.escalaAtribuicao.deleteMany({
-    where: {
-      ocorrenciaId: { in: ocorrencias.map((o) => o.id) },
-      geradoAutomaticamente: true,
-    },
-  });
+  const ocorrenciaIds = (ocorrencias ?? []).map((o) => o.id);
+  if (ocorrenciaIds.length > 0) {
+    const { error: deleteError } = await supabase
+      .from("EscalaAtribuicao")
+      .delete()
+      .in("ocorrenciaId", ocorrenciaIds)
+      .eq("geradoAutomaticamente", true);
+    if (deleteError) throw deleteError;
+  }
 
   await gerarEscalaPeriodo(periodoInicioISO, periodoFimISO);
 }

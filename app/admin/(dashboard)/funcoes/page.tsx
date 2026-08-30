@@ -1,9 +1,10 @@
 import Link from "next/link";
-import { prisma } from "@/lib/prisma";
+import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { DeleteButton } from "@/components/admin/DeleteButton";
 import { PRIORIDADE_LABEL, GRAU_LABEL } from "@/lib/constants";
+import type { FuncaoRow } from "@/lib/types";
 import { deleteFuncao } from "./actions";
 
 const PRIORIDADE_COLOR: Record<string, "red" | "yellow" | "gray"> = {
@@ -16,10 +17,15 @@ const PRIORIDADE_COLOR: Record<string, "red" | "yellow" | "gray"> = {
 export const dynamic = "force-dynamic";
 
 export default async function FuncoesPage() {
-  const funcoes = await prisma.funcao.findMany({
-    where: { ativo: true },
-    orderBy: [{ prioridade: "asc" }, { nome: "asc" }],
-  });
+  const { data, error } = await supabase
+    .from("Funcao")
+    .select("*")
+    .eq("ativo", true)
+    .order("prioridade", { ascending: true })
+    .order("nome", { ascending: true })
+    .returns<FuncaoRow[]>();
+  if (error) throw error;
+  const funcoes = data ?? [];
 
   return (
     <div>

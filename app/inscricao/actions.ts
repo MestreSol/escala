@@ -1,7 +1,8 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { prisma } from "@/lib/prisma";
+import { supabase } from "@/lib/supabase";
+import { generateId, nowIso } from "@/lib/db";
 import { servidorSchema } from "@/lib/validations";
 import type { ServidorFormState } from "@/lib/types";
 
@@ -19,15 +20,19 @@ export async function createServidor(_prevState: ServidorFormState, formData: Fo
   }
 
   const { missaIds, ...servidorData } = parsed.data;
+  const servidorId = generateId();
 
-  await prisma.servidor.create({
-    data: {
-      ...servidorData,
-      preferenciasMissas: {
-        create: missaIds.map((missaId) => ({ missaId })),
-      },
-    },
-  });
+  const { error: servidorError } = await supabase
+    .from("Servidor")
+    .insert({ id: servidorId, ...servidorData, updatedAt: nowIso() });
+  if (servidorError) return { error: servidorError.message };
+
+  if (missaIds.length > 0) {
+    const { error: preferenciasError } = await supabase
+      .from("ServidorMissaPreferencia")
+      .insert(missaIds.map((missaId) => ({ id: generateId(), servidorId, missaId })));
+    if (preferenciasError) return { error: preferenciasError.message };
+  }
 
   redirect("/inscricao/sucesso");
 }

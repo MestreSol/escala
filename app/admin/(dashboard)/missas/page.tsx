@@ -1,19 +1,26 @@
 import Link from "next/link";
-import { prisma } from "@/lib/prisma";
+import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/Button";
 import { DeleteButton } from "@/components/admin/DeleteButton";
 import { DIAS_SEMANA } from "@/lib/constants";
+import type { MissaFuncaoRequisitoRow, MissaRow } from "@/lib/types";
 import { deleteMissa } from "./actions";
 
 // Página lê dados do banco a cada acesso — nunca deve ser congelada em build.
 export const dynamic = "force-dynamic";
 
+type MissaComRequisitos = MissaRow & { funcoesRequisito: MissaFuncaoRequisitoRow[] };
+
 export default async function MissasPage() {
-  const missas = await prisma.missa.findMany({
-    where: { ativo: true },
-    orderBy: [{ diaSemana: "asc" }, { horario: "asc" }],
-    include: { funcoesRequisito: { where: { ativo: true } } },
-  });
+  const { data, error } = await supabase
+    .from("Missa")
+    .select("*, funcoesRequisito:MissaFuncaoRequisito(*)")
+    .eq("ativo", true)
+    .order("diaSemana", { ascending: true })
+    .order("horario", { ascending: true })
+    .returns<MissaComRequisitos[]>();
+  if (error) throw error;
+  const missas = data ?? [];
 
   return (
     <div>
@@ -44,7 +51,9 @@ export default async function MissasPage() {
                   <td className="px-4 py-3 text-sm font-medium text-gray-900">{DIAS_SEMANA[missa.diaSemana]}</td>
                   <td className="px-4 py-3 text-sm text-gray-600">{missa.horario}</td>
                   <td className="px-4 py-3 text-sm text-gray-600">{missa.comunidade}</td>
-                  <td className="px-4 py-3 text-sm text-gray-600">{missa.funcoesRequisito.length}</td>
+                  <td className="px-4 py-3 text-sm text-gray-600">
+                    {missa.funcoesRequisito.filter((r) => r.ativo).length}
+                  </td>
                   <td className="px-4 py-3 text-right text-sm">
                     <div className="flex justify-end gap-4">
                       <Link

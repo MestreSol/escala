@@ -1,8 +1,9 @@
 import Link from "next/link";
-import { prisma } from "@/lib/prisma";
+import { supabase } from "@/lib/supabase";
 import { Badge } from "@/components/ui/Badge";
 import { DeleteButton } from "@/components/admin/DeleteButton";
 import { GRAU_LABEL } from "@/lib/constants";
+import type { ServidorMissaPreferenciaRow, ServidorRow } from "@/lib/types";
 import { deleteServidor } from "./actions";
 
 const GRAU_COLOR: Record<string, "green" | "blue" | "yellow"> = {
@@ -21,17 +22,20 @@ export default async function ServidoresPage({
 }) {
   const { comunidade, categoria } = await searchParams;
 
-  const where = {
-    ativo: true,
-    ...(comunidade ? { comunidade: { contains: comunidade } } : {}),
-    ...(categoria ? { categoria: categoria as "ACOLITO" | "COROINHA" | "CERIMONIARIO" } : {}),
-  };
+  let query = supabase
+    .from("Servidor")
+    .select("*, preferenciasMissas:ServidorMissaPreferencia(*)")
+    .eq("ativo", true)
+    .order("nome", { ascending: true });
 
-  const servidores = await prisma.servidor.findMany({
-    where,
-    orderBy: { nome: "asc" },
-    include: { preferenciasMissas: true },
-  });
+  if (comunidade) query = query.ilike("comunidade", `%${comunidade}%`);
+  if (categoria) query = query.eq("categoria", categoria);
+
+  const { data, error } = await query.returns<
+    (ServidorRow & { preferenciasMissas: ServidorMissaPreferenciaRow[] })[]
+  >();
+  if (error) throw error;
+  const servidores = data ?? [];
 
   return (
     <div>

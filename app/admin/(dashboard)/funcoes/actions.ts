@@ -2,8 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { prisma } from "@/lib/prisma";
+import { supabase } from "@/lib/supabase";
+import { generateId, nowIso } from "@/lib/db";
 import { funcaoSchema } from "@/lib/validations";
+import { setFuncoesQuePodeAssumir } from "@/lib/funcaoAcumulacao";
 
 export type FuncaoFormState = { error?: string };
 
@@ -23,7 +25,11 @@ export async function createFuncao(_prevState: FuncaoFormState, formData: FormDa
     return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
   }
 
-  await prisma.funcao.create({ data: parsed.data });
+  const { error } = await supabase
+    .from("Funcao")
+    .insert({ id: generateId(), ...parsed.data, updatedAt: nowIso() });
+  if (error) return { error: error.message };
+
   revalidatePath("/admin/funcoes");
   redirect("/admin/funcoes");
 }
@@ -38,32 +44,39 @@ export async function updateFuncao(
     return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
   }
 
-  await prisma.funcao.update({ where: { id }, data: parsed.data });
+  const { error } = await supabase
+    .from("Funcao")
+    .update({ ...parsed.data, updatedAt: nowIso() })
+    .eq("id", id);
+  if (error) return { error: error.message };
+
   revalidatePath("/admin/funcoes");
   revalidatePath(`/admin/funcoes/${id}`);
   return {};
 }
 
 export async function deleteFuncao(id: string) {
-  await prisma.funcao.delete({ where: { id } });
+  const { error } = await supabase.from("Funcao").delete().eq("id", id);
+  if (error) throw error;
+
   revalidatePath("/admin/funcoes");
   redirect("/admin/funcoes");
 }
 
 export async function saveFuncaoAcumulacoes(funcaoId: string, formData: FormData) {
-  const outrasFuncoes = await prisma.funcao.findMany({
-    where: { ativo: true, id: { not: funcaoId } },
-    select: { id: true },
-  });
+  const { data: outrasFuncoes, error } = await supabase
+    .from("Funcao")
+    .select("id")
+    .eq("ativo", true)
+    .neq("id", funcaoId)
+    .returns<{ id: string }[]>();
+  if (error) throw error;
 
-  const selecionadas = outrasFuncoes
+  const selecionadas = (outrasFuncoes ?? [])
     .map((f) => f.id)
     .filter((id) => formData.get(`assume_${id}`) === "on");
 
-  await prisma.funcao.update({
-    where: { id: funcaoId },
-    data: { podeAssumir: { set: selecionadas.map((id) => ({ id })) } },
-  });
+  await setFuncoesQuePodeAssumir(funcaoId, selecionadas);
 
   revalidatePath(`/admin/funcoes/${funcaoId}`);
 }
