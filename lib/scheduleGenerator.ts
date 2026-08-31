@@ -59,6 +59,12 @@ export type GerarEscalaOptions = {
     data: Date;
     prioridade: Prioridade;
   }>;
+  /**
+   * Mapa servidorId -> lista de servidorId vinculados (ex: irmãos). Quem tem
+   * vínculo só é escalado numa ocorrência se TODOS os vinculados também
+   * forem — senão, nenhum do grupo serve naquela ocorrência.
+   */
+  vinculos?: Map<string, string[]>;
 };
 
 type UnidadeParaPreencher = {
@@ -77,6 +83,36 @@ function grauCompativel(servidor: ServidorCandidato, grauMinimo: Grau): boolean 
 /** Chave do dia civil (UTC) de uma data-âncora — ver lib/occurrences.ts. */
 function diaChave(data: Date): string {
   return `${data.getUTCFullYear()}-${data.getUTCMonth()}-${data.getUTCDate()}`;
+}
+
+/**
+ * A partir do mapa de pares (servidorId -> ids vinculados), calcula o grupo
+ * completo (fechamento transitivo) de cada servidor vinculado — assim, se A
+ * está ligado a B e B está ligado a C, os três formam um único grupo.
+ */
+function calcularGruposVinculo(vinculos: Map<string, string[]>): Map<string, Set<string>> {
+  const grupoPorServidor = new Map<string, Set<string>>();
+  const visitados = new Set<string>();
+
+  for (const inicio of vinculos.keys()) {
+    if (visitados.has(inicio)) continue;
+    const grupo = new Set<string>();
+    const pilha = [inicio];
+    while (pilha.length > 0) {
+      const atual = pilha.pop()!;
+      if (grupo.has(atual)) continue;
+      grupo.add(atual);
+      visitados.add(atual);
+      for (const vizinho of vinculos.get(atual) ?? []) {
+        if (!grupo.has(vizinho)) pilha.push(vizinho);
+      }
+    }
+    for (const membro of grupo) {
+      grupoPorServidor.set(membro, grupo);
+    }
+  }
+
+  return grupoPorServidor;
 }
 
 function agruparPorOcorrencia(slots: SlotParaPreencher[]): Map<string, SlotParaPreencher[]> {
@@ -152,6 +188,11 @@ function montarUnidades(slots: SlotParaPreencher[], funcoesAtomicas: Set<string>
  * atribuídas se houver gente distinta para TODAS as suas vagas na mesma
  * ocorrência; senão, todas ficam em aberto (não entram no acúmulo).
  *
+ * Servidores vinculados (ver `vinculos`, ex: irmãos) só são escalados numa
+ * ocorrência se TODOS os vinculados também puderem servir ali (preferem
+ * aquela missa e há vaga não-atômica distinta e elegível para cada um);
+ * senão, nenhum do grupo é escalado naquela ocorrência.
+ *
  * Vagas normais sem candidato distinto disponível tentam, como último
  * recurso, ser cobertas por quem já está escalado na mesma ocorrência numa
  * função que pode "acumular" aquela vaga. Se nem isso for possível, a vaga
@@ -166,6 +207,7 @@ export function gerarEscala(
   const acumulacoes = options.acumulacoes ?? new Map<string, string[]>();
   const funcoesAtomicas = options.funcoesAtomicas ?? new Set<string>();
   const servidorPorId = new Map(servidores.map((s) => [s.id, s]));
+  const gruposVinculo = calcularGruposVinculo(options.vinculos ?? new Map());
 
   const contagemTotal = new Map<string, number>(Object.entries(options.contagemInicial ?? {}));
   const ultimaFuncao = new Map<string, string>();
@@ -219,7 +261,84 @@ export function gerarEscala(
       assignadoPorFuncao.set(existente.funcaoId, existente.servidorId);
     }
 
+    // Pré-passo de vínculos (ex: irmãos): ou o grupo inteiro é escalado
+    // junto nesta ocorrência (em vagas não-atômicas distintas), ou nenhum
+    // dos vinculados serve aqui. Só considera grupos totalmente livres nesta
+    // ocorrência (ninguém do grupo já veio de uma atribuição existente).
+    const missaIdOcorrencia = slotsDaOcorrenciaBrutos[0]?.missaId;
+    if (missaIdOcorrencia) {
+      const gruposJaProcessados = new Set<string>();
+      for (const servidor of servidores) {
+        const grupo = gruposVinculo.get(servidor.id);
+        if (!grupo || grupo.size < 2) continue;
+
+        const chaveGrupo = [...grupo].sort().join(",");
+        if (gruposJaProcessados.has(chaveGrupo)) continue;
+        gruposJaProcessados.add(chaveGrupo);
+
+        const membros = [...grupo]
+          .map((id) => servidorPorId.get(id))
+          .filter((s): s is ServidorCandidato => Boolean(s));
+
+        if (membros.length !== grupo.size || membros.some((m) => usadosNaOcorrencia.has(m.id))) {
+          continue;
+        }
+
+        const todosPreferem = membros.every((m) => m.missaIdsPreferidas.has(missaIdOcorrencia));
+        if (!todosPreferem) {
+          for (const m of membros) usadosNaOcorrencia.add(m.id);
+          continue;
+        }
+
+        const poolSlots = unidades
+          .filter((u) => !u.atomica)
+          .flatMap((u) => u.slots)
+          .sort((a, b) => PRIORIDADE_ORDEM[a.prioridade] - PRIORIDADE_ORDEM[b.prioridade]);
+
+        const vagasReservadas = new Set<string>();
+        const alocacao = new Map<string, SlotParaPreencher>();
+
+        for (const membro of membros) {
+          const slot = poolSlots.find((s) => {
+            const chave = `${s.funcaoId}:${s.slotIndex}`;
+            return !vagasReservadas.has(chave) && grauCompativel(membro, s.grauMinimo);
+          });
+          if (!slot) break;
+          vagasReservadas.add(`${slot.funcaoId}:${slot.slotIndex}`);
+          alocacao.set(membro.id, slot);
+        }
+
+        if (alocacao.size !== membros.length) {
+          for (const m of membros) usadosNaOcorrencia.add(m.id);
+          continue;
+        }
+
+        for (const [servidorId, slot] of alocacao) {
+          resultado.push({
+            ocorrenciaId: slot.ocorrenciaId,
+            funcaoId: slot.funcaoId,
+            slotIndex: slot.slotIndex,
+            servidorId,
+          });
+          contagemTotal.set(servidorId, (contagemTotal.get(servidorId) ?? 0) + 1);
+          ultimaFuncao.set(servidorId, slot.funcaoId);
+          usadosNaOcorrencia.add(servidorId);
+          assignadoPorFuncao.set(slot.funcaoId, servidorId);
+          marcarUsoNoDia(servidorId, slot.data, slot.prioridade);
+
+          const unidadeDoSlot = unidades.find((u) => u.slots.includes(slot));
+          if (unidadeDoSlot) {
+            const indice = unidadeDoSlot.slots.indexOf(slot);
+            unidadeDoSlot.slots.splice(indice, 1);
+          }
+        }
+      }
+    }
+
     for (const unidade of unidades) {
+      // Pode ter ficado vazia se o pré-passo de vínculo reservou todas as
+      // vagas dessa função para o grupo de irmãos.
+      if (unidade.slots.length === 0) continue;
       const missaId = unidade.slots[0].missaId;
 
       if (!unidade.atomica) {

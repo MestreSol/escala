@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { generateId, nowIso } from "@/lib/db";
 import { servidorSchema } from "@/lib/validations";
+import { setVinculosDoServidor } from "@/lib/servidorVinculo";
 import type { ServidorFormState } from "@/lib/types";
 
 export async function updateServidor(
@@ -47,6 +48,24 @@ export async function updateServidor(
 
   revalidatePath("/admin/servidores");
   redirect("/admin/servidores");
+}
+
+export async function saveServidorVinculos(servidorId: string, formData: FormData) {
+  const { data: outrosServidores, error } = await supabase
+    .from("Servidor")
+    .select("id")
+    .eq("ativo", true)
+    .neq("id", servidorId)
+    .returns<{ id: string }[]>();
+  if (error) throw error;
+
+  const selecionados = (outrosServidores ?? [])
+    .map((s) => s.id)
+    .filter((id) => formData.get(`vinculo_${id}`) === "on");
+
+  await setVinculosDoServidor(servidorId, selecionados);
+
+  revalidatePath(`/admin/servidores/${servidorId}`);
 }
 
 export async function deleteServidor(id: string) {

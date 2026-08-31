@@ -64,6 +64,12 @@ export type MissaOcorrenciaRow = {
   createdAt: string;
 };
 
+export type ServidorVinculoRow = {
+  id: string;
+  servidorAId: string;
+  servidorBId: string;
+};
+
 export type EscalaAtribuicaoRow = {
   id: string;
   escalaId: string | null;

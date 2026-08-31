@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { supabase } from "@/lib/supabase";
 import { generateId, nowIso } from "@/lib/db";
 import { getAcumulacoesMap } from "@/lib/funcaoAcumulacao";
+import { getVinculosMap } from "@/lib/servidorVinculo";
 import { gerarDatasOcorrencia, combinarDataHorario, lerDataArmazenada } from "@/lib/occurrences";
 import { gerarEscala, type SlotParaPreencher, type ServidorCandidato } from "@/lib/scheduleGenerator";
 import type {
@@ -155,6 +156,7 @@ export async function gerarEscalaPeriodo(periodoInicioISO: string, periodoFimISO
   }
 
   const acumulacoes = await getAcumulacoesMap();
+  const vinculos = await getVinculosMap();
 
   const { data: funcoesAtomicasDb, error: atomicasError } = await supabase
     .from("Funcao")
@@ -169,6 +171,7 @@ export async function gerarEscalaPeriodo(periodoInicioISO: string, periodoFimISO
     acumulacoes,
     funcoesAtomicas,
     atribuicoesExistentes,
+    vinculos,
   });
 
   const escalaId = generateId();

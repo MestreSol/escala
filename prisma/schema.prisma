@@ -93,6 +93,24 @@ model Servidor {
 
   preferenciasMissas ServidorMissaPreferencia[]
   atribuicoes        EscalaAtribuicao[]
+
+  vinculosComoA ServidorVinculo[] @relation("VinculoA")
+  vinculosComoB ServidorVinculo[] @relation("VinculoB")
+}
+
+/// Vínculo entre dois servidores (ex: irmãos que só servem quando o outro
+/// também vai) — o gerador de escala só escala ambos juntos na mesma missa,
+/// ou nenhum dos dois. Par não ordenado: A/B não tem significado além de
+/// evitar duas linhas para o mesmo par.
+model ServidorVinculo {
+  id          String @id @default(cuid())
+  servidorAId String
+  servidorBId String
+
+  servidorA Servidor @relation("VinculoA", fields: [servidorAId], references: [id], onDelete: Cascade)
+  servidorB Servidor @relation("VinculoB", fields: [servidorBId], references: [id], onDelete: Cascade)
+
+  @@unique([servidorAId, servidorBId])
 }
 
 model ServidorMissaPreferencia {
