@@ -47,10 +47,18 @@ export type GerarEscalaOptions = {
   /**
    * Atribuições já existentes nas ocorrências envolvidas, vindas de uma
    * geração incremental anterior. Usado para não escalar a mesma pessoa
-   * duas vezes na mesma ocorrência e para permitir acúmulo de função
-   * mesmo quando a função "base" foi preenchida numa rodada anterior.
+   * duas vezes na mesma ocorrência, para permitir acúmulo de função mesmo
+   * quando a função "base" foi preenchida numa rodada anterior, e para
+   * respeitar a regra de "não repetir no mesmo dia" (ver `data`/`prioridade`
+   * abaixo) mesmo quando a atribuição anterior não faz parte deste lote.
    */
-  atribuicoesExistentes?: Array<{ ocorrenciaId: string; funcaoId: string; servidorId: string | null }>;
+  atribuicoesExistentes?: Array<{
+    ocorrenciaId: string;
+    funcaoId: string;
+    servidorId: string | null;
+    data: Date;
+    prioridade: Prioridade;
+  }>;
 };
 
 type UnidadeParaPreencher = {
@@ -64,6 +72,11 @@ type UnidadeParaPreencher = {
 /** Quem tem um grau maior também pode exercer funções dos graus abaixo (hierarquia). */
 function grauCompativel(servidor: ServidorCandidato, grauMinimo: Grau): boolean {
   return GRAU_ORDEM[servidor.categoria] >= GRAU_ORDEM[grauMinimo];
+}
+
+/** Chave do dia civil (UTC) de uma data-âncora — ver lib/occurrences.ts. */
+function diaChave(data: Date): string {
+  return `${data.getUTCFullYear()}-${data.getUTCMonth()}-${data.getUTCDate()}`;
 }
 
 function agruparPorOcorrencia(slots: SlotParaPreencher[]): Map<string, SlotParaPreencher[]> {
@@ -129,6 +142,12 @@ function montarUnidades(slots: SlotParaPreencher[], funcoesAtomicas: Set<string>
  * (equilíbrio) e sorteia entre os empatados; ninguém é escalado duas vezes
  * na mesma ocorrência exceto via acumulação explícita (ver `acumulacoes`).
  *
+ * Ninguém é escalado em duas ocorrências diferentes no mesmo dia, a menos
+ * que a função já atribuída a essa pessoa naquele dia seja de prioridade
+ * BAIXA — nesse caso ela continua elegível para outras missas do dia (ex:
+ * quem faz Sineta de manhã ainda pode ser escalado à noite; quem faz
+ * Cerimoniário de manhã, não).
+ *
  * Funções marcadas em `funcoesAtomicas` são preenchidas em bloco: só são
  * atribuídas se houver gente distinta para TODAS as suas vagas na mesma
  * ocorrência; senão, todas ficam em aberto (não entram no acúmulo).
@@ -152,12 +171,26 @@ export function gerarEscala(
   const ultimaFuncao = new Map<string, string>();
 
   const existentesPorOcorrencia = new Map<string, Array<{ funcaoId: string; servidorId: string }>>();
+  // servidorId -> dias em que já está escalado numa função de prioridade
+  // ALTA/MEDIA. Quem só tem função BAIXA no dia continua livre para outras
+  // missas do mesmo dia (ver diaChave/regra abaixo).
+  const usadosNoDiaAlta = new Map<string, Set<string>>();
+
+  function marcarUsoNoDia(servidorId: string, data: Date, prioridade: Prioridade) {
+    if (prioridade === "BAIXA") return;
+    const chave = diaChave(data);
+    const lista = usadosNoDiaAlta.get(chave);
+    if (lista) lista.add(servidorId);
+    else usadosNoDiaAlta.set(chave, new Set([servidorId]));
+  }
+
   for (const a of options.atribuicoesExistentes ?? []) {
     if (!a.servidorId) continue;
     const lista = existentesPorOcorrencia.get(a.ocorrenciaId);
     const entrada = { funcaoId: a.funcaoId, servidorId: a.servidorId };
     if (lista) lista.push(entrada);
     else existentesPorOcorrencia.set(a.ocorrenciaId, [entrada]);
+    marcarUsoNoDia(a.servidorId, a.data, a.prioridade);
   }
 
   const grupos = agruparPorOcorrencia(slotsInput);
@@ -195,7 +228,8 @@ export function gerarEscala(
             (s) =>
               s.missaIdsPreferidas.has(slot.missaId) &&
               grauCompativel(s, slot.grauMinimo) &&
-              !usadosNaOcorrencia.has(s.id)
+              !usadosNaOcorrencia.has(s.id) &&
+              !usadosNoDiaAlta.get(diaChave(slot.data))?.has(s.id)
           );
 
           if (candidatos.length === 0) {
@@ -215,16 +249,19 @@ export function gerarEscala(
           ultimaFuncao.set(vencedor.id, slot.funcaoId);
           usadosNaOcorrencia.add(vencedor.id);
           assignadoPorFuncao.set(slot.funcaoId, vencedor.id);
+          marcarUsoNoDia(vencedor.id, slot.data, slot.prioridade);
         }
         continue;
       }
 
       // Unidade atômica: só preenche se houver gente para TODAS as vagas.
+      const diaUnidade = unidade.slots[0].data;
       const candidatosBase = servidores.filter(
         (s) =>
           s.missaIdsPreferidas.has(missaId) &&
           grauCompativel(s, unidade.grauMinimo) &&
-          !usadosNaOcorrencia.has(s.id)
+          !usadosNaOcorrencia.has(s.id) &&
+          !usadosNoDiaAlta.get(diaChave(diaUnidade))?.has(s.id)
       );
 
       if (candidatosBase.length < unidade.slots.length) {
@@ -253,6 +290,7 @@ export function gerarEscala(
         ultimaFuncao.set(vencedor.id, slot.funcaoId);
         usadosNaOcorrencia.add(vencedor.id);
         assignadoPorFuncao.set(slot.funcaoId, vencedor.id);
+        marcarUsoNoDia(vencedor.id, slot.data, slot.prioridade);
 
         const indice = poolDisponivel.findIndex((c) => c.id === vencedor.id);
         poolDisponivel.splice(indice, 1);
@@ -283,6 +321,7 @@ export function gerarEscala(
       if (acumuladorId) {
         contagemTotal.set(acumuladorId, (contagemTotal.get(acumuladorId) ?? 0) + 1);
         ultimaFuncao.set(acumuladorId, slot.funcaoId);
+        marcarUsoNoDia(acumuladorId, slot.data, slot.prioridade);
       }
     }
   }

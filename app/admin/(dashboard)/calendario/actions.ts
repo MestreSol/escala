@@ -11,9 +11,19 @@ import type {
   FuncaoRow,
   MissaFuncaoRequisitoRow,
   MissaRow,
+  Prioridade,
   ServidorMissaPreferenciaRow,
   ServidorRow,
 } from "@/lib/types";
+
+type AtribuicaoExistente = {
+  ocorrenciaId: string;
+  funcaoId: string;
+  slotIndex: number;
+  servidorId: string | null;
+  data: Date;
+  prioridade: Prioridade;
+};
 
 export async function materializarOcorrencias(periodoInicio: Date, periodoFim: Date) {
   const { data: missas, error: missasError } = await supabase
@@ -66,15 +76,22 @@ async function montarSlotsEmAberto(periodoInicio: Date, periodoFim: Date) {
   }
 
   const ocorrenciaIds = (ocorrencias ?? []).map((o) => o.id);
-  let atribuicoesExistentes: EscalaAtribuicaoRow[] = [];
+  let atribuicoesExistentes: AtribuicaoExistente[] = [];
   if (ocorrenciaIds.length > 0) {
     const { data, error } = await supabase
       .from("EscalaAtribuicao")
-      .select("*")
+      .select("*, funcao:Funcao(prioridade), ocorrencia:MissaOcorrencia(data)")
       .in("ocorrenciaId", ocorrenciaIds)
-      .returns<EscalaAtribuicaoRow[]>();
+      .returns<(EscalaAtribuicaoRow & { funcao: { prioridade: Prioridade }; ocorrencia: { data: string } })[]>();
     if (error) throw error;
-    atribuicoesExistentes = data ?? [];
+    atribuicoesExistentes = (data ?? []).map((a) => ({
+      ocorrenciaId: a.ocorrenciaId,
+      funcaoId: a.funcaoId,
+      slotIndex: a.slotIndex,
+      servidorId: a.servidorId,
+      data: lerDataArmazenada(a.ocorrencia.data),
+      prioridade: a.funcao.prioridade,
+    }));
   }
 
   const existentesSet = new Set(
