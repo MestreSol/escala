@@ -29,6 +29,13 @@ export const servidorSchema = z.object({
   missaIds: z.array(z.string()).min(1, "Selecione pelo menos uma missa"),
 });
 
+export const usuarioSchema = z.object({
+  username: z.string().trim().min(3, "Informe um usuário com pelo menos 3 caracteres"),
+  senha: z.string().min(6, "A senha deve ter pelo menos 6 caracteres"),
+  papel: z.enum(["ADMIN", "OPERADOR"]),
+});
+
 export type FuncaoInput = z.infer<typeof funcaoSchema>;
 export type MissaInput = z.infer<typeof missaSchema>;
 export type ServidorInput = z.infer<typeof servidorSchema>;
+export type UsuarioInput = z.infer<typeof usuarioSchema>;

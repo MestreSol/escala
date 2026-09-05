@@ -55,7 +55,7 @@ export async function GET(request: Request) {
   }
   altura = Math.max(altura, 400);
 
-  return new ImageResponse(
+  const response = new ImageResponse(
     (
       <div
         style={{
@@ -153,6 +153,15 @@ export async function GET(request: Request) {
       fonts,
     }
   );
+
+  // O Next define "public, max-age=0, must-revalidate" por padrão em
+  // produção — sem um validador (ETag/Last-Modified), isso deixa margem pra
+  // caches intermediários (CDN, proxy) servirem uma imagem antiga em vez de
+  // revalidar. Como esta rota sempre reflete o estado atual do banco (missas
+  // e atribuições podem ser apagadas a qualquer momento), forçamos no-store
+  // pra garantir que a imagem de confirmação nunca fique desatualizada.
+  response.headers.set("Cache-Control", "no-store");
+  return response;
 }
 
 function dedupeNomes(linhas: LinhaEscala[]): LinhaEscala[] {

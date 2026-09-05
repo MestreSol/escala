@@ -15,6 +15,22 @@ enum Prioridade {
   BAIXA
 }
 
+/// ADMIN cadastra e remove outros usuários; OPERADOR usa o painel normalmente
+/// (calendário, presença, servidores etc.) sem acesso à tela de usuários.
+enum PapelUsuario {
+  ADMIN
+  OPERADOR
+}
+
+model Usuario {
+  id           String       @id @default(cuid())
+  username     String       @unique
+  passwordHash String
+  papel        PapelUsuario @default(OPERADOR)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+}
+
 /// Grau/hierarquia do servidor. Quem tem um grau mais alto pode exercer as
 /// funções dos graus abaixo (Cerimoniário faz tudo que Acólito e Coroinha
 /// fazem; Acólito faz tudo que Coroinha faz). Ordem: COROINHA < ACOLITO <
@@ -154,6 +170,10 @@ model EscalaAtribuicao {
   servidorId            String?
   servidorNomeSnapshot  String?
   geradoAutomaticamente Boolean  @default(true)
+  /// Presença registrada pelo administrador depois da missa: null = ainda não
+  /// registrada, true = compareceu, false = faltou. Alimenta o cálculo de
+  /// frequência que rebaixa a prioridade de quem falta muito (ver lib/frequencia.ts).
+  presente              Boolean?
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 

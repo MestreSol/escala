@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ReactNode } from "react";
+import { obterUsuarioAtual } from "@/lib/sessao";
 import { logout } from "../login/actions";
 
 const NAV_ITEMS = [
@@ -8,9 +9,14 @@ const NAV_ITEMS = [
   { href: "/admin/missas", label: "Missas" },
   { href: "/admin/servidores", label: "Servidores" },
   { href: "/admin/calendario", label: "Calendário" },
+  { href: "/admin/acompanhamento", label: "Acompanhamento" },
 ];
 
-export default function AdminLayout({ children }: { children: ReactNode }) {
+export default async function AdminLayout({ children }: { children: ReactNode }) {
+  const usuarioLogado = await obterUsuarioAtual();
+  const navItems =
+    usuarioLogado?.papel === "ADMIN" ? [...NAV_ITEMS, { href: "/admin/usuarios", label: "Usuários" }] : NAV_ITEMS;
+
   return (
     <div className="flex min-h-screen bg-gray-50">
       <aside className="flex w-56 shrink-0 flex-col border-r border-gray-200 bg-white">
@@ -19,7 +25,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           <p className="text-xs text-gray-500">Administração</p>
         </div>
         <nav className="flex-1 space-y-1 px-2 py-4">
-          {NAV_ITEMS.map((item) => (
+          {navItems.map((item) => (
             <Link
               key={item.href}
               href={item.href}
@@ -30,6 +36,9 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           ))}
         </nav>
         <form action={logout} className="border-t border-gray-200 p-2">
+          {usuarioLogado ? (
+            <p className="truncate px-3 pb-1 text-xs text-gray-400">{usuarioLogado.username}</p>
+          ) : null}
           <button
             type="submit"
             className="w-full rounded-md px-3 py-2 text-left text-sm font-medium text-gray-500 hover:bg-gray-100 cursor-pointer"

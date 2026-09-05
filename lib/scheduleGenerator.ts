@@ -18,6 +18,12 @@ export type ServidorCandidato = {
   id: string;
   categoria: Grau;
   missaIdsPreferidas: Set<string>;
+  /**
+   * Frequência de presença abaixo do limiar (ver lib/frequencia.ts). Não
+   * exclui o servidor do sorteio, só o deixa por último: só é escolhido
+   * quando não sobra ninguém com frequência normal para a vaga.
+   */
+  frequenciaBaixa?: boolean;
 };
 
 export type AtribuicaoGerada = {
@@ -197,6 +203,11 @@ function montarUnidades(slots: SlotParaPreencher[], funcoesAtomicas: Set<string>
  * recurso, ser cobertas por quem já está escalado na mesma ocorrência numa
  * função que pode "acumular" aquela vaga. Se nem isso for possível, a vaga
  * fica em aberto (servidorId null).
+ *
+ * Quem tem frequência de presença baixa (`ServidorCandidato.frequenciaBaixa`,
+ * calculado a partir das presenças registradas — ver lib/frequencia.ts) cai
+ * de prioridade: só é escolhido quando não sobra mais ninguém com frequência
+ * normal disputando a mesma vaga.
  */
 export function gerarEscala(
   slotsInput: SlotParaPreencher[],
@@ -244,7 +255,13 @@ export function gerarEscala(
 
   function escolherVencedor(candidatos: ServidorCandidato[], funcaoId: string): ServidorCandidato {
     const semRepeticao = candidatos.filter((c) => ultimaFuncao.get(c.id) !== funcaoId);
-    const grupoEscolha = semRepeticao.length > 0 ? semRepeticao : candidatos;
+    let grupoEscolha = semRepeticao.length > 0 ? semRepeticao : candidatos;
+
+    // Quem tem frequência baixa só é escolhido se não sobrar ninguém com
+    // frequência normal disputando a mesma vaga (ver ServidorCandidato.frequenciaBaixa).
+    const semFrequenciaBaixa = grupoEscolha.filter((c) => !c.frequenciaBaixa);
+    grupoEscolha = semFrequenciaBaixa.length > 0 ? semFrequenciaBaixa : grupoEscolha;
+
     const menorContagem = Math.min(...grupoEscolha.map((c) => contagemTotal.get(c.id) ?? 0));
     const empatados = grupoEscolha.filter((c) => (contagemTotal.get(c.id) ?? 0) === menorContagem);
     return empatados[Math.floor(random() * empatados.length)];

@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/Button";
 import { DeleteButton } from "@/components/admin/DeleteButton";
 import { periodoDoMes, paraExibicao, lerDataArmazenada } from "@/lib/occurrences";
 import type { EscalaAtribuicaoRow, MissaFuncaoRequisitoRow, MissaRow, MissaOcorrenciaRow } from "@/lib/types";
-import { materializarOcorrencias, gerarEscalaPeriodo, regenerarEscalaPeriodo } from "./actions";
+import { materializarOcorrencias, gerarEscalaPeriodo, regenerarEscalaPeriodo, apagarEscalaPeriodo } from "./actions";
 
 // Página lê e materializa dados do banco a cada acesso — nunca deve ser congelada em build.
 export const dynamic = "force-dynamic";
@@ -96,6 +96,11 @@ export default async function CalendarioPage({
             action={regenerarEscalaPeriodo.bind(null, periodoInicioISO, periodoFimISO)}
             confirmMessage="Isso apaga todas as atribuições geradas automaticamente neste mês e sorteia tudo de novo. Continuar?"
             label="Regenerar tudo"
+          />
+          <DeleteButton
+            action={apagarEscalaPeriodo.bind(null, periodoInicioISO, periodoFimISO)}
+            confirmMessage="Isso apaga TODAS as atribuições deste mês, incluindo as editadas manualmente, sem gerar outras no lugar. Use quando 'Gerar escala' não estiver preenchendo mais nada. Continuar?"
+            label="Apagar escala do mês"
           />
         </div>
       </div>

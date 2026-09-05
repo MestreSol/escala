@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { generateId, nowIso } from "@/lib/db";
 import { getAcumulacoesMap } from "@/lib/funcaoAcumulacao";
 import { getVinculosMap } from "@/lib/servidorVinculo";
+import { getServidoresComFrequenciaBaixa } from "@/lib/frequencia";
 import { gerarDatasOcorrencia, combinarDataHorario, lerDataArmazenada } from "@/lib/occurrences";
 import { gerarEscala, diaChave, type SlotParaPreencher, type ServidorCandidato } from "@/lib/scheduleGenerator";
 import type {
@@ -142,10 +143,13 @@ export async function gerarEscalaPeriodo(periodoInicioISO: string, periodoFimISO
     .returns<(ServidorRow & { preferenciasMissas: ServidorMissaPreferenciaRow[] })[]>();
   if (servidoresError) throw servidoresError;
 
+  const servidoresComFrequenciaBaixa = await getServidoresComFrequenciaBaixa();
+
   const servidores: ServidorCandidato[] = (servidoresDb ?? []).map((s) => ({
     id: s.id,
     categoria: s.categoria,
     missaIdsPreferidas: new Set(s.preferenciasMissas.map((p) => p.missaId)),
+    frequenciaBaixa: servidoresComFrequenciaBaixa.has(s.id),
   }));
 
   const contagemInicial: Record<string, number> = {};
@@ -288,6 +292,32 @@ export async function atualizarAtribuicaoManual(
   revalidatePath("/admin/calendario");
 }
 
+/**
+ * Registra se o servidor escalado numa vaga compareceu ou não à missa.
+ * Alimenta lib/frequencia.ts, que rebaixa a prioridade de quem falta muito
+ * nas próximas gerações de escala (ver ServidorCandidato.frequenciaBaixa).
+ */
+export async function registrarPresenca(
+  ocorrenciaId: string,
+  funcaoId: string,
+  slotIndex: number,
+  formData: FormData
+) {
+  const valor = String(formData.get("presente") ?? "");
+  const presente = valor === "" ? null : valor === "true";
+
+  const { error } = await supabase
+    .from("EscalaAtribuicao")
+    .update({ presente, updatedAt: nowIso() })
+    .eq("ocorrenciaId", ocorrenciaId)
+    .eq("funcaoId", funcaoId)
+    .eq("slotIndex", slotIndex);
+  if (error) throw error;
+
+  revalidatePath(`/admin/calendario/${ocorrenciaId}`);
+  revalidatePath("/admin/acompanhamento");
+}
+
 export async function regenerarEscalaPeriodo(periodoInicioISO: string, periodoFimISO: string) {
   const periodoInicio = new Date(periodoInicioISO);
   const periodoFim = new Date(periodoFimISO);
@@ -313,4 +343,33 @@ export async function regenerarEscalaPeriodo(periodoInicioISO: string, periodoFi
   }
 
   await gerarEscalaPeriodo(periodoInicioISO, periodoFimISO);
+}
+
+/**
+ * Apaga TODAS as atribuições do período (automáticas e manuais), sem gerar
+ * nada em seguida — diferente de `regenerarEscalaPeriodo`, que só limpa as
+ * automáticas e já sorteia de novo. Usado para dar um "reset" completo no mês
+ * quando o botão "Gerar escala" não preenche mais nada (porque toda vaga já
+ * tem uma linha de atribuição, mesmo que em aberto ou editada manualmente) e
+ * é preciso liberar todos os slots antes de gerar de novo.
+ */
+export async function apagarEscalaPeriodo(periodoInicioISO: string, periodoFimISO: string) {
+  const periodoInicio = new Date(periodoInicioISO);
+  const periodoFim = new Date(periodoFimISO);
+
+  const { data: ocorrencias, error } = await supabase
+    .from("MissaOcorrencia")
+    .select("id")
+    .gte("data", periodoInicio.toISOString())
+    .lte("data", periodoFim.toISOString())
+    .returns<{ id: string }[]>();
+  if (error) throw error;
+
+  const ocorrenciaIds = (ocorrencias ?? []).map((o) => o.id);
+  if (ocorrenciaIds.length > 0) {
+    const { error: deleteError } = await supabase.from("EscalaAtribuicao").delete().in("ocorrenciaId", ocorrenciaIds);
+    if (deleteError) throw deleteError;
+  }
+
+  revalidatePath("/admin/calendario");
 }

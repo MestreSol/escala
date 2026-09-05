@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Field";
+import { PresencaSelect } from "@/components/admin/PresencaSelect";
 import { DIAS_SEMANA } from "@/lib/constants";
 import { lerDataArmazenada, paraExibicao } from "@/lib/occurrences";
 import type {
@@ -16,7 +17,7 @@ import type {
   MissaRow,
   ServidorRow,
 } from "@/lib/types";
-import { atualizarAtribuicaoManual } from "../actions";
+import { atualizarAtribuicaoManual, registrarPresenca } from "../actions";
 
 // Página lê dados do banco a cada acesso — nunca deve ser congelada em build.
 export const dynamic = "force-dynamic";
@@ -70,6 +71,7 @@ export default async function OcorrenciaDetailPage({
           totalSlots: req.quantidade,
           servidorId: atribuicao?.servidorId ?? null,
           servidorNome: atribuicao?.servidorNomeSnapshot ?? atribuicao?.servidor?.nome ?? null,
+          presente: atribuicao?.presente ?? null,
           gerado: Boolean(atribuicao),
         };
       })
@@ -99,11 +101,13 @@ export default async function OcorrenciaDetailPage({
                 <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Função</th>
                 <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Servidor</th>
                 <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Editar</th>
+                <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Presença</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {linhas.map((linha) => {
                 const salvar = atualizarAtribuicaoManual.bind(null, ocorrencia.id, linha.funcaoId, linha.slotIndex);
+                const salvarPresenca = registrarPresenca.bind(null, ocorrencia.id, linha.funcaoId, linha.slotIndex);
                 return (
                   <tr key={`${linha.funcaoId}-${linha.slotIndex}`}>
                     <td className="px-4 py-3 text-sm font-medium text-gray-900">
@@ -133,6 +137,13 @@ export default async function OcorrenciaDetailPage({
                           Salvar
                         </Button>
                       </form>
+                    </td>
+                    <td className="px-4 py-3 text-sm">
+                      {linha.servidorId ? (
+                        <PresencaSelect action={salvarPresenca} defaultValue={linha.presente} />
+                      ) : (
+                        <span className="text-gray-400">—</span>
+                      )}
                     </td>
                   </tr>
                 );

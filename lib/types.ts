@@ -1,4 +1,16 @@
 export type ServidorFormState = { error?: string };
+export type UsuarioFormState = { error?: string };
+
+export type PapelUsuario = "ADMIN" | "OPERADOR";
+
+export type UsuarioRow = {
+  id: string;
+  username: string;
+  passwordHash: string;
+  papel: PapelUsuario;
+  createdAt: string;
+  updatedAt: string;
+};
 
 export type MissaOption = {
   id: string;
@@ -79,6 +91,8 @@ export type EscalaAtribuicaoRow = {
   servidorId: string | null;
   servidorNomeSnapshot: string | null;
   geradoAutomaticamente: boolean;
+  /** null = presença ainda não registrada; true = compareceu; false = faltou. */
+  presente: boolean | null;
   createdAt: string;
   updatedAt: string;
 };
