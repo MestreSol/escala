@@ -81,7 +81,7 @@ function grauCompativel(servidor: ServidorCandidato, grauMinimo: Grau): boolean 
 }
 
 /** Chave do dia civil (UTC) de uma data-âncora — ver lib/occurrences.ts. */
-function diaChave(data: Date): string {
+export function diaChave(data: Date): string {
   return `${data.getUTCFullYear()}-${data.getUTCMonth()}-${data.getUTCDate()}`;
 }
 

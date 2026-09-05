@@ -6,7 +6,7 @@ import { generateId, nowIso } from "@/lib/db";
 import { getAcumulacoesMap } from "@/lib/funcaoAcumulacao";
 import { getVinculosMap } from "@/lib/servidorVinculo";
 import { gerarDatasOcorrencia, combinarDataHorario, lerDataArmazenada } from "@/lib/occurrences";
-import { gerarEscala, type SlotParaPreencher, type ServidorCandidato } from "@/lib/scheduleGenerator";
+import { gerarEscala, diaChave, type SlotParaPreencher, type ServidorCandidato } from "@/lib/scheduleGenerator";
 import type {
   EscalaAtribuicaoRow,
   FuncaoRow,
@@ -202,6 +202,41 @@ export async function gerarEscalaPeriodo(periodoInicioISO: string, periodoFimISO
   revalidatePath("/admin/calendario");
 }
 
+/**
+ * Mesma regra do gerador automático (ver gerarEscala/marcarUsoNoDia): um
+ * servidor só pode ser escalado manualmente para uma segunda missa no mesmo
+ * dia civil se todas as suas atribuições existentes nesse dia forem de
+ * função de prioridade BAIXA. Ignora a própria ocorrência sendo editada.
+ */
+async function validarSemConflitoNoDia(servidorId: string, ocorrenciaId: string, servidorNome: string) {
+  const { data: ocorrenciaAtual, error: ocorrenciaError } = await supabase
+    .from("MissaOcorrencia")
+    .select("data")
+    .eq("id", ocorrenciaId)
+    .returns<{ data: string }[]>()
+    .maybeSingle();
+  if (ocorrenciaError) throw ocorrenciaError;
+  if (!ocorrenciaAtual) return;
+
+  const diaAtual = diaChave(lerDataArmazenada(ocorrenciaAtual.data));
+
+  const { data: outrasAtribuicoes, error } = await supabase
+    .from("EscalaAtribuicao")
+    .select("ocorrenciaId, funcao:Funcao(prioridade), ocorrencia:MissaOcorrencia(data)")
+    .eq("servidorId", servidorId)
+    .neq("ocorrenciaId", ocorrenciaId)
+    .returns<{ ocorrenciaId: string; funcao: { prioridade: Prioridade }; ocorrencia: { data: string } }[]>();
+  if (error) throw error;
+
+  const temConflito = (outrasAtribuicoes ?? []).some(
+    (a) => a.funcao.prioridade !== "BAIXA" && diaChave(lerDataArmazenada(a.ocorrencia.data)) === diaAtual
+  );
+
+  if (temConflito) {
+    throw new Error(`${servidorNome} já está escalado(a) em outra missa neste mesmo dia.`);
+  }
+}
+
 export async function atualizarAtribuicaoManual(
   ocorrenciaId: string,
   funcaoId: string,
@@ -220,6 +255,8 @@ export async function atualizarAtribuicaoManual(
       .maybeSingle();
     if (error) throw error;
     servidorNomeSnapshot = servidor?.nome ?? null;
+
+    await validarSemConflitoNoDia(servidorId, ocorrenciaId, servidorNomeSnapshot ?? "Servidor");
   }
 
   const { data: existente, error: existenteError } = await supabase
