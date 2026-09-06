@@ -196,8 +196,9 @@ function montarUnidades(slots: SlotParaPreencher[], funcoesAtomicas: Set<string>
  *
  * Servidores vinculados (ver `vinculos`, ex: irmãos) só são escalados numa
  * ocorrência se TODOS os vinculados também puderem servir ali (preferem
- * aquela missa e há vaga não-atômica distinta e elegível para cada um);
- * senão, nenhum do grupo é escalado naquela ocorrência.
+ * aquela missa, ninguém do grupo já tem função ALTA/MEDIA nesse dia, e há
+ * vaga não-atômica distinta e elegível para cada um); senão, nenhum do grupo
+ * é escalado naquela ocorrência.
  *
  * Vagas normais sem candidato distinto disponível tentam, como último
  * recurso, ser cobertas por quem já está escalado na mesma ocorrência numa
@@ -284,6 +285,7 @@ export function gerarEscala(
     // ocorrência (ninguém do grupo já veio de uma atribuição existente).
     const missaIdOcorrencia = slotsDaOcorrenciaBrutos[0]?.missaId;
     if (missaIdOcorrencia) {
+      const diaOcorrencia = diaChave(slotsDaOcorrenciaBrutos[0].data);
       const gruposJaProcessados = new Set<string>();
       for (const servidor of servidores) {
         const grupo = gruposVinculo.get(servidor.id);
@@ -298,6 +300,16 @@ export function gerarEscala(
           .filter((s): s is ServidorCandidato => Boolean(s));
 
         if (membros.length !== grupo.size || membros.some((m) => usadosNaOcorrencia.has(m.id))) {
+          continue;
+        }
+
+        // Mesma regra de "não escalar duas vezes no mesmo dia" do resto do
+        // gerador: se algum vinculado já tem função ALTA/MEDIA nesse dia
+        // (de uma ocorrência anterior), o par inteiro fica de fora daqui —
+        // sem isso, o pré-passo de vínculo ignorava esse limite e escalava
+        // os dois de novo à noite mesmo já tendo servido de manhã.
+        if (membros.some((m) => usadosNoDiaAlta.get(diaOcorrencia)?.has(m.id))) {
+          for (const m of membros) usadosNaOcorrencia.add(m.id);
           continue;
         }
 
