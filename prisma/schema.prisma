@@ -109,9 +109,26 @@ model Servidor {
 
   preferenciasMissas ServidorMissaPreferencia[]
   atribuicoes        EscalaAtribuicao[]
+  indisponibilidades ServidorIndisponibilidade[]
 
   vinculosComoA ServidorVinculo[] @relation("VinculoA")
   vinculosComoB ServidorVinculo[] @relation("VinculoB")
+}
+
+/// Dia do mês em que o próprio servidor registrou que não pode servir (ex:
+/// viagem, prova, compromisso). O gerador de escala nunca o escala em
+/// nenhuma missa desse dia (ver ServidorCandidato.diasIndisponiveis em
+/// lib/scheduleGenerator.ts). `data` é uma âncora de dia civil (meia-noite
+/// UTC, mesma convenção de MissaOcorrencia.data — ver lib/occurrences.ts).
+model ServidorIndisponibilidade {
+  id         String   @id @default(cuid())
+  servidorId String
+  data       DateTime
+  createdAt  DateTime @default(now())
+
+  servidor Servidor @relation(fields: [servidorId], references: [id], onDelete: Cascade)
+
+  @@unique([servidorId, data])
 }
 
 /// Vínculo entre dois servidores (ex: irmãos que só servem quando o outro

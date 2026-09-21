@@ -6,6 +6,7 @@ import { generateId, nowIso } from "@/lib/db";
 import { getAcumulacoesMap } from "@/lib/funcaoAcumulacao";
 import { getVinculosMap } from "@/lib/servidorVinculo";
 import { getServidoresComFrequenciaBaixa } from "@/lib/frequencia";
+import { getIndisponibilidadesMap } from "@/lib/indisponibilidade";
 import { gerarDatasOcorrencia, combinarDataHorario, lerDataArmazenada } from "@/lib/occurrences";
 import { gerarEscala, diaChave, type SlotParaPreencher, type ServidorCandidato } from "@/lib/scheduleGenerator";
 import type {
@@ -144,12 +145,14 @@ export async function gerarEscalaPeriodo(periodoInicioISO: string, periodoFimISO
   if (servidoresError) throw servidoresError;
 
   const servidoresComFrequenciaBaixa = await getServidoresComFrequenciaBaixa();
+  const indisponibilidadesMap = await getIndisponibilidadesMap(periodoInicio, periodoFim);
 
   const servidores: ServidorCandidato[] = (servidoresDb ?? []).map((s) => ({
     id: s.id,
     categoria: s.categoria,
     missaIdsPreferidas: new Set(s.preferenciasMissas.map((p) => p.missaId)),
     frequenciaBaixa: servidoresComFrequenciaBaixa.has(s.id),
+    diasIndisponiveis: indisponibilidadesMap.get(s.id),
   }));
 
   const contagemInicial: Record<string, number> = {};

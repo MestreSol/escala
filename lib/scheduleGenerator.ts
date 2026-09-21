@@ -24,6 +24,13 @@ export type ServidorCandidato = {
    * quando não sobra ninguém com frequência normal para a vaga.
    */
   frequenciaBaixa?: boolean;
+  /**
+   * Dias (ver diaChave) em que o próprio servidor registrou que não pode
+   * servir neste mês (ver lib/indisponibilidade.ts). Ao contrário de
+   * frequenciaBaixa, isso exclui o servidor do sorteio para qualquer missa
+   * nesses dias, não só o deixa por último.
+   */
+  diasIndisponiveis?: Set<string>;
 };
 
 export type AtribuicaoGerada = {
@@ -84,6 +91,11 @@ type UnidadeParaPreencher = {
 /** Quem tem um grau maior também pode exercer funções dos graus abaixo (hierarquia). */
 function grauCompativel(servidor: ServidorCandidato, grauMinimo: Grau): boolean {
   return GRAU_ORDEM[servidor.categoria] >= GRAU_ORDEM[grauMinimo];
+}
+
+/** Se o servidor não marcou o dia da vaga como indisponível (ver ServidorCandidato.diasIndisponiveis). */
+function disponivelNoDia(servidor: ServidorCandidato, data: Date): boolean {
+  return !servidor.diasIndisponiveis?.has(diaChave(data));
 }
 
 /** Chave do dia civil (UTC) de uma data-âncora — ver lib/occurrences.ts. */
@@ -209,6 +221,11 @@ function montarUnidades(slots: SlotParaPreencher[], funcoesAtomicas: Set<string>
  * calculado a partir das presenças registradas — ver lib/frequencia.ts) cai
  * de prioridade: só é escolhido quando não sobra mais ninguém com frequência
  * normal disputando a mesma vaga.
+ *
+ * Servidores nunca são escalados em dias que marcaram como indisponíveis
+ * (`ServidorCandidato.diasIndisponiveis`, ver lib/indisponibilidade.ts) —
+ * diferente de frequenciaBaixa, essa restrição exclui o servidor do sorteio
+ * por completo naquele dia, em qualquer missa.
  */
 export function gerarEscala(
   slotsInput: SlotParaPreencher[],
@@ -314,7 +331,8 @@ export function gerarEscala(
         }
 
         const todosPreferem = membros.every((m) => m.missaIdsPreferidas.has(missaIdOcorrencia));
-        if (!todosPreferem) {
+        const todosDisponiveis = membros.every((m) => disponivelNoDia(m, slotsDaOcorrenciaBrutos[0].data));
+        if (!todosPreferem || !todosDisponiveis) {
           for (const m of membros) usadosNaOcorrencia.add(m.id);
           continue;
         }
@@ -377,7 +395,8 @@ export function gerarEscala(
               s.missaIdsPreferidas.has(slot.missaId) &&
               grauCompativel(s, slot.grauMinimo) &&
               !usadosNaOcorrencia.has(s.id) &&
-              !usadosNoDiaAlta.get(diaChave(slot.data))?.has(s.id)
+              !usadosNoDiaAlta.get(diaChave(slot.data))?.has(s.id) &&
+              disponivelNoDia(s, slot.data)
           );
 
           if (candidatos.length === 0) {
@@ -409,7 +428,8 @@ export function gerarEscala(
           s.missaIdsPreferidas.has(missaId) &&
           grauCompativel(s, unidade.grauMinimo) &&
           !usadosNaOcorrencia.has(s.id) &&
-          !usadosNoDiaAlta.get(diaChave(diaUnidade))?.has(s.id)
+          !usadosNoDiaAlta.get(diaChave(diaUnidade))?.has(s.id) &&
+          disponivelNoDia(s, diaUnidade)
       );
 
       if (candidatosBase.length < unidade.slots.length) {

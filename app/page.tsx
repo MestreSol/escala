@@ -17,6 +17,12 @@ export default function HomePage() {
           Quero me inscrever para servir
         </Link>
         <Link
+          href="/indisponibilidade"
+          className="rounded-md bg-gray-100 px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-200"
+        >
+          Marcar dias que não posso servir
+        </Link>
+        <Link
           href="/admin"
           className="rounded-md bg-gray-100 px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-200"
         >

@@ -82,6 +82,13 @@ export type ServidorVinculoRow = {
   servidorBId: string;
 };
 
+export type ServidorIndisponibilidadeRow = {
+  id: string;
+  servidorId: string;
+  data: string;
+  createdAt: string;
+};
+
 export type EscalaAtribuicaoRow = {
   id: string;
   escalaId: string | null;
