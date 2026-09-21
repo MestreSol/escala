@@ -4,7 +4,7 @@ import { ServidorForm } from "@/components/ServidorForm";
 import { Button } from "@/components/ui/Button";
 import { getVinculosDoServidor } from "@/lib/servidorVinculo";
 import type { MissaOption, ServidorMissaPreferenciaRow, ServidorRow } from "@/lib/types";
-import { updateServidor, saveServidorVinculos } from "../actions";
+import { updateServidor, saveServidorVinculos, atualizarFotoServidor } from "../actions";
 
 // Página lê dados do banco a cada acesso — nunca deve ser congelada em build.
 export const dynamic = "force-dynamic";
@@ -58,10 +58,49 @@ export default async function EditarServidorPage({ params }: { params: Promise<{
           missas={missas}
           defaultValues={{
             ...servidor,
+            // A âncora vem sempre em meia-noite UTC (ver lib/occurrences.ts);
+            // os 10 primeiros caracteres já são o "yyyy-MM-dd" esperado pelo
+            // <input type="date">, sem risco de deslocar de dia.
+            dataNascimento: servidor.dataNascimento?.slice(0, 10) ?? "",
             missaIds: servidor.preferenciasMissas.map((p) => p.missaId),
           }}
           submitLabel="Salvar alterações"
         />
+      </div>
+
+      <div>
+        <h2 className="mb-1 text-lg font-semibold text-gray-900">Foto</h2>
+        <p className="mb-4 text-sm text-gray-500">
+          Usada para identificação do servidor (ex: crachá, acompanhamento).
+        </p>
+        <form
+          action={atualizarFotoServidor.bind(null, servidor.id)}
+          encType="multipart/form-data"
+          className="flex items-center gap-6 rounded-xl border border-gray-200 bg-white p-6 shadow-sm"
+        >
+          {servidor.fotoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element -- URL externa (Supabase Storage), não dá pra usar next/image sem configurar o domínio.
+            <img
+              src={servidor.fotoUrl}
+              alt={servidor.nome}
+              className="h-24 w-24 shrink-0 rounded-lg object-cover"
+            />
+          ) : (
+            <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-xs text-gray-400">
+              Sem foto
+            </div>
+          )}
+          <div className="flex-1 space-y-3">
+            <input
+              type="file"
+              name="foto"
+              accept="image/jpeg,image/png,image/webp"
+              required
+              className="block w-full text-sm text-gray-700 file:mr-3 file:rounded-md file:border-0 file:bg-gray-100 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-gray-800 hover:file:bg-gray-200"
+            />
+            <Button type="submit">Salvar foto</Button>
+          </div>
+        </form>
       </div>
 
       <div>

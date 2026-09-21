@@ -3,6 +3,8 @@ import { supabase } from "@/lib/supabase";
 import { Badge } from "@/components/ui/Badge";
 import { DeleteButton } from "@/components/admin/DeleteButton";
 import { GRAU_LABEL } from "@/lib/constants";
+import { lerDataArmazenada } from "@/lib/occurrences";
+import { calcularIdade } from "@/lib/idade";
 import type { ServidorMissaPreferenciaRow, ServidorRow } from "@/lib/types";
 import { deleteServidor } from "./actions";
 
@@ -95,7 +97,9 @@ export default async function ServidoresPage({
               {servidores.map((servidor) => (
                 <tr key={servidor.id}>
                   <td className="px-4 py-3 text-sm font-medium text-gray-900">{servidor.nome}</td>
-                  <td className="px-4 py-3 text-sm text-gray-600">{servidor.idade}</td>
+                  <td className="px-4 py-3 text-sm text-gray-600">
+                    {servidor.dataNascimento ? calcularIdade(lerDataArmazenada(servidor.dataNascimento)) : "—"}
+                  </td>
                   <td className="px-4 py-3 text-sm text-gray-600">{servidor.comunidade}</td>
                   <td className="px-4 py-3 text-sm">
                     <Badge color={GRAU_COLOR[servidor.categoria]}>{GRAU_LABEL[servidor.categoria]}</Badge>

@@ -9,7 +9,7 @@ import type { ServidorFormState } from "@/lib/types";
 export async function createServidor(_prevState: ServidorFormState, formData: FormData): Promise<ServidorFormState> {
   const parsed = servidorSchema.safeParse({
     nome: formData.get("nome"),
-    idade: formData.get("idade"),
+    dataNascimento: formData.get("dataNascimento"),
     comunidade: formData.get("comunidade"),
     categoria: formData.get("categoria"),
     missaIds: formData.getAll("missaIds"),

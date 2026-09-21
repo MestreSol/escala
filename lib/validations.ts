@@ -21,7 +21,9 @@ export const missaFuncaoRequisitoSchema = z.object({
 
 export const servidorSchema = z.object({
   nome: z.string().trim().min(2, "Informe o nome"),
-  idade: z.coerce.number().int().min(1, "Informe uma idade válida").max(120),
+  dataNascimento: z.coerce
+    .date({ message: "Informe uma data de nascimento válida" })
+    .max(new Date(), { message: "Data de nascimento não pode ser no futuro" }),
   comunidade: z.string().trim().min(2, "Informe a comunidade"),
   categoria: z.enum(["COROINHA", "ACOLITO", "CERIMONIARIO"], {
     message: "Selecione a categoria do servidor",

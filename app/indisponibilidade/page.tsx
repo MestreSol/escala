@@ -4,8 +4,9 @@ import { ptBR } from "date-fns/locale";
 import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/Button";
 import { Label, Select } from "@/components/ui/Field";
-import { periodoDoMes, paraExibicao } from "@/lib/occurrences";
+import { periodoDoMes, paraExibicao, lerDataArmazenada } from "@/lib/occurrences";
 import { getIndisponibilidadesDoServidor } from "@/lib/indisponibilidade";
+import { calcularIdade } from "@/lib/idade";
 import { GRAU_LABEL } from "@/lib/constants";
 import type { Grau } from "@/lib/types";
 import { salvarIndisponibilidades } from "./actions";
@@ -28,10 +29,10 @@ export default async function IndisponibilidadePage({
 
   const { data: servidoresData, error } = await supabase
     .from("Servidor")
-    .select("id, nome, idade, categoria")
+    .select("id, nome, dataNascimento, categoria")
     .eq("ativo", true)
     .order("nome", { ascending: true })
-    .returns<{ id: string; nome: string; idade: number; categoria: Grau }[]>();
+    .returns<{ id: string; nome: string; dataNascimento: string | null; categoria: Grau }[]>();
   if (error) throw error;
   const servidores = servidoresData ?? [];
 
@@ -40,7 +41,8 @@ export default async function IndisponibilidadePage({
   const maxNomeLen = servidores.reduce((max, s) => Math.max(max, s.nome.length), 0);
   const opcaoServidor = (s: (typeof servidores)[number]) => {
     const nome = s.nome.padEnd(maxNomeLen + 2, " ");
-    const idade = `${s.idade}a`.padStart(4, " ");
+    const idadeLabel = s.dataNascimento ? `${calcularIdade(lerDataArmazenada(s.dataNascimento))}a` : "—";
+    const idade = idadeLabel.padStart(4, " ");
     return `${nome}${idade}  ${GRAU_LABEL[s.categoria]}`;
   };
 

@@ -97,15 +97,20 @@ model MissaFuncaoRequisito {
 }
 
 model Servidor {
-  id         String   @id @default(cuid())
-  nome       String
-  idade      Int
-  comunidade String
+  id             String    @id @default(cuid())
+  nome           String
+  /// Âncora de dia civil (meia-noite UTC, mesma convenção de MissaOcorrencia.data
+  /// — ver lib/occurrences.ts). Nullable: servidores migrados de `idade` (removida)
+  /// ficam sem data até o admin preencher; ver lib/idade.ts para cálculo de idade.
+  dataNascimento DateTime?
+  /// URL pública do Storage (bucket "fotos-servidores") — ver lib/storage.ts.
+  fotoUrl        String?
+  comunidade     String
   /// Grau do servidor. Determina quais funções ele pode exercer (o dele e os abaixo).
-  categoria  Grau
-  ativo      Boolean  @default(true)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  categoria      Grau
+  ativo          Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   preferenciasMissas ServidorMissaPreferencia[]
   atribuicoes        EscalaAtribuicao[]

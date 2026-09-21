@@ -55,7 +55,9 @@ export type MissaFuncaoRequisitoRow = {
 export type ServidorRow = {
   id: string;
   nome: string;
-  idade: number;
+  /** Âncora de dia civil (ver lib/occurrences.ts); null = ainda não preenchida. */
+  dataNascimento: string | null;
+  fotoUrl: string | null;
   comunidade: string;
   categoria: Grau;
   ativo: boolean;
