@@ -4,11 +4,13 @@ import { useActionState } from "react";
 import { login, LoginState } from "./actions";
 import { Button } from "@/components/ui/Button";
 import { Input, Label, FieldError } from "@/components/ui/Field";
+import { useActionToast } from "@/components/hooks/useActionToast";
 
 const initialState: LoginState = {};
 
 export function LoginForm({ redirectTo }: { redirectTo: string }) {
   const [state, formAction, pending] = useActionState(login, initialState);
+  useActionToast(state, pending, "Login realizado.");
 
   return (
     <form action={formAction} className="space-y-4">

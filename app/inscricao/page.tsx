@@ -11,6 +11,9 @@ export default async function InscricaoPage() {
     .from("Missa")
     .select("*")
     .eq("ativo", true)
+    // "Missas grandes" (dataUnica preenchida) não entram na lista de
+    // preferência — a escala delas não usa preferência (ver MissaForm).
+    .is("dataUnica", null)
     .order("diaSemana", { ascending: true })
     .order("horario", { ascending: true })
     .returns<MissaOption[]>();

@@ -39,6 +39,10 @@ export type MissaRow = {
   diaSemana: number;
   horario: string;
   comunidade: string;
+  /** Âncora de dia civil (ver lib/occurrences.ts); preenchida = "missa grande" de evento único. */
+  dataUnica: string | null;
+  escalarTodosAtivos: boolean;
+  comunidadeResponsavel: string | null;
   ativo: boolean;
   createdAt: string;
   updatedAt: string;

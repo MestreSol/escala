@@ -4,6 +4,7 @@ import { ptBR } from "date-fns/locale";
 import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/Button";
 import { Label, Select } from "@/components/ui/Field";
+import { ActionForm } from "@/components/ui/ActionForm";
 import { periodoDoMes, paraExibicao, lerDataArmazenada } from "@/lib/occurrences";
 import { getIndisponibilidadesDoServidor } from "@/lib/indisponibilidade";
 import { calcularIdade } from "@/lib/idade";
@@ -129,8 +130,9 @@ export default async function IndisponibilidadePage({
               </div>
             </div>
 
-            <form
+            <ActionForm
               action={salvarIndisponibilidades.bind(null, servidorSelecionado, periodoInicioISO, periodoFimISO)}
+              successMessage="Indisponibilidades salvas."
               className="space-y-4 rounded-xl border border-gray-200 bg-white p-4 shadow-sm"
             >
               <div className="grid grid-cols-7 gap-px overflow-hidden rounded-lg border border-gray-200 bg-gray-200 text-xs">
@@ -171,7 +173,7 @@ export default async function IndisponibilidadePage({
               <Button type="submit" className="w-full">
                 Salvar indisponibilidades
               </Button>
-            </form>
+            </ActionForm>
           </div>
         )}
       </div>

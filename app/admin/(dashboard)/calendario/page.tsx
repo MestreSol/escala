@@ -12,6 +12,7 @@ import {
 import { ptBR } from "date-fns/locale";
 import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/Button";
+import { ActionForm } from "@/components/ui/ActionForm";
 import { DeleteButton } from "@/components/admin/DeleteButton";
 import { periodoDoMes, paraExibicao, lerDataArmazenada } from "@/lib/occurrences";
 import type { EscalaAtribuicaoRow, MissaFuncaoRequisitoRow, MissaRow, MissaOcorrenciaRow } from "@/lib/types";
@@ -86,9 +87,9 @@ export default async function CalendarioPage({
           </div>
         </div>
         <div className="flex gap-3">
-          <form action={gerarEscalaPeriodo.bind(null, periodoInicioISO, periodoFimISO)}>
+          <ActionForm action={gerarEscalaPeriodo.bind(null, periodoInicioISO, periodoFimISO)} successMessage="Escala gerada.">
             <Button type="submit">Gerar escala</Button>
-          </form>
+          </ActionForm>
           <Link href={`/admin/calendario/confirmar?mes=${mesAtualParam}`}>
             <Button variant="secondary">Confirmar escala do mês</Button>
           </Link>
@@ -96,11 +97,13 @@ export default async function CalendarioPage({
             action={regenerarEscalaPeriodo.bind(null, periodoInicioISO, periodoFimISO)}
             confirmMessage="Isso apaga todas as atribuições geradas automaticamente neste mês e sorteia tudo de novo. Continuar?"
             label="Regenerar tudo"
+            successMessage="Escala regenerada."
           />
           <DeleteButton
             action={apagarEscalaPeriodo.bind(null, periodoInicioISO, periodoFimISO)}
             confirmMessage="Isso apaga TODAS as atribuições deste mês, incluindo as editadas manualmente, sem gerar outras no lugar. Use quando 'Gerar escala' não estiver preenchendo mais nada. Continuar?"
             label="Apagar escala do mês"
+            successMessage="Escala do mês apagada."
           />
         </div>
       </div>

@@ -1,5 +1,13 @@
 export type Grau = "COROINHA" | "ACOLITO" | "CERIMONIARIO";
 export type Prioridade = "ALTA" | "MEDIA" | "BAIXA";
+/**
+ * Como a missa dessa vaga escolhe candidatos (ver Missa.escalarTodosAtivos e
+ * Missa.comunidadeResponsavel no schema — "missas grandes", ex: Natal):
+ * NORMAL = preferência de missa de cada servidor (comportamento padrão);
+ * TODOS_ATIVOS = qualquer servidor ativo (grau ainda é respeitado);
+ * COMUNIDADE = só servidores de ServidorCandidato.comunidade === comunidadeResponsavel.
+ */
+export type ModoEscalacao = "NORMAL" | "TODOS_ATIVOS" | "COMUNIDADE";
 
 const PRIORIDADE_ORDEM: Record<Prioridade, number> = { ALTA: 0, MEDIA: 1, BAIXA: 2 };
 const GRAU_ORDEM: Record<Grau, number> = { COROINHA: 0, ACOLITO: 1, CERIMONIARIO: 2 };
@@ -12,11 +20,15 @@ export type SlotParaPreencher = {
   grauMinimo: Grau;
   prioridade: Prioridade;
   slotIndex: number;
+  modoEscalacao: ModoEscalacao;
+  /** Só usado quando modoEscalacao === "COMUNIDADE". */
+  comunidadeResponsavel?: string;
 };
 
 export type ServidorCandidato = {
   id: string;
   categoria: Grau;
+  comunidade: string;
   missaIdsPreferidas: Set<string>;
   /**
    * Frequência de presença abaixo do limiar (ver lib/frequencia.ts). Não
@@ -96,6 +108,19 @@ function grauCompativel(servidor: ServidorCandidato, grauMinimo: Grau): boolean 
 /** Se o servidor não marcou o dia da vaga como indisponível (ver ServidorCandidato.diasIndisponiveis). */
 function disponivelNoDia(servidor: ServidorCandidato, data: Date): boolean {
   return !servidor.diasIndisponiveis?.has(diaChave(data));
+}
+
+/**
+ * Se o servidor pode ser considerado pra missa dessa vaga (ver ModoEscalacao
+ * acima) — substitui a checagem de preferência de missa nas "missas grandes".
+ */
+function elegivelParaMissa(
+  servidor: ServidorCandidato,
+  slot: Pick<SlotParaPreencher, "missaId" | "modoEscalacao" | "comunidadeResponsavel">
+): boolean {
+  if (slot.modoEscalacao === "TODOS_ATIVOS") return true;
+  if (slot.modoEscalacao === "COMUNIDADE") return servidor.comunidade === slot.comunidadeResponsavel;
+  return servidor.missaIdsPreferidas.has(slot.missaId);
 }
 
 /** Chave do dia civil (UTC) de uma data-âncora — ver lib/occurrences.ts. */
@@ -189,7 +214,10 @@ function montarUnidades(slots: SlotParaPreencher[], funcoesAtomicas: Set<string>
  * Função pura: sorteia servidores para os slots informados, missa a missa.
  *
  * Para cada ocorrência: cada servidor só serve missas que marcou como
- * preferidas e funções cujo grau mínimo seu grau alcança (hierarquia:
+ * preferidas — a menos que a vaga seja de uma "missa grande" com
+ * `modoEscalacao` TODOS_ATIVOS (qualquer servidor ativo) ou COMUNIDADE (só
+ * quem tem `ServidorCandidato.comunidade` igual à comunidade responsável),
+ * ver `elegivelParaMissa` — e funções cujo grau mínimo seu grau alcança (hierarquia:
  * Cerimoniário cobre Acólito e Coroinha; Acólito cobre Coroinha); evita
  * repetir a mesma função que exerceu na última vez em que serviu; entre os
  * candidatos restantes, prioriza quem tem menor contagem total no período
@@ -330,7 +358,7 @@ export function gerarEscala(
           continue;
         }
 
-        const todosPreferem = membros.every((m) => m.missaIdsPreferidas.has(missaIdOcorrencia));
+        const todosPreferem = membros.every((m) => elegivelParaMissa(m, slotsDaOcorrenciaBrutos[0]));
         const todosDisponiveis = membros.every((m) => disponivelNoDia(m, slotsDaOcorrenciaBrutos[0].data));
         if (!todosPreferem || !todosDisponiveis) {
           for (const m of membros) usadosNaOcorrencia.add(m.id);
@@ -386,13 +414,12 @@ export function gerarEscala(
       // Pode ter ficado vazia se o pré-passo de vínculo reservou todas as
       // vagas dessa função para o grupo de irmãos.
       if (unidade.slots.length === 0) continue;
-      const missaId = unidade.slots[0].missaId;
 
       if (!unidade.atomica) {
         for (const slot of unidade.slots) {
           const candidatos = servidores.filter(
             (s) =>
-              s.missaIdsPreferidas.has(slot.missaId) &&
+              elegivelParaMissa(s, slot) &&
               grauCompativel(s, slot.grauMinimo) &&
               !usadosNaOcorrencia.has(s.id) &&
               !usadosNoDiaAlta.get(diaChave(slot.data))?.has(s.id) &&
@@ -425,7 +452,7 @@ export function gerarEscala(
       const diaUnidade = unidade.slots[0].data;
       const candidatosBase = servidores.filter(
         (s) =>
-          s.missaIdsPreferidas.has(missaId) &&
+          elegivelParaMissa(s, unidade.slots[0]) &&
           grauCompativel(s, unidade.grauMinimo) &&
           !usadosNaOcorrencia.has(s.id) &&
           !usadosNoDiaAlta.get(diaChave(diaUnidade))?.has(s.id) &&

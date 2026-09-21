@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input, Label, Select, FieldError } from "@/components/ui/Field";
+import { useActionToast } from "@/components/hooks/useActionToast";
 import { PRIORIDADE_LABEL, GRAU_LABEL } from "@/lib/constants";
 import type { FuncaoFormState } from "@/app/admin/(dashboard)/funcoes/actions";
 
@@ -20,6 +21,7 @@ type FuncaoFormProps = {
 
 export function FuncaoForm({ action, defaultValues, submitLabel }: FuncaoFormProps) {
   const [state, formAction, pending] = useActionState(action, {});
+  useActionToast(state, pending, "Função salva.");
 
   return (
     <form action={formAction} className="max-w-md space-y-4">

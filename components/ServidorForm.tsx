@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input, Label, Select, FieldError } from "@/components/ui/Field";
+import { useActionToast } from "@/components/hooks/useActionToast";
 import { DIAS_SEMANA } from "@/lib/constants";
 import type { MissaOption, ServidorFormState } from "@/lib/types";
 
@@ -30,6 +31,7 @@ const GRAUS = [
 
 export function ServidorForm({ action, missas, defaultValues, submitLabel }: ServidorFormProps) {
   const [state, formAction, pending] = useActionState(action, {});
+  useActionToast(state, pending, "Servidor salvo.");
   const missaIdsSelecionadas = new Set(defaultValues?.missaIds ?? []);
 
   const comunidades = Array.from(

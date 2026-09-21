@@ -8,11 +8,36 @@ export const funcaoSchema = z.object({
   exigeGrupoCompleto: z.coerce.boolean().default(false),
 });
 
-export const missaSchema = z.object({
-  diaSemana: z.coerce.number().int().min(0).max(6),
+const missaCamposComuns = {
   horario: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Horário inválido (HH:mm)"),
   comunidade: z.string().trim().min(2, "Informe a comunidade"),
+};
+
+export const modoEscalacaoSchema = z.enum(["NORMAL", "TODOS_ATIVOS", "COMUNIDADE"]);
+
+const missaRecorrenteSchema = z.object({
+  tipo: z.literal("RECORRENTE"),
+  diaSemana: z.coerce.number().int().min(0).max(6),
+  ...missaCamposComuns,
 });
+
+// "Missa grande" — evento de data única (ex: Natal), escalado por "todos os
+// servidores ativos" ou por "comunidade responsável" em vez do ciclo semanal
+// + preferência normal (ver lib/scheduleGenerator.ts).
+const missaDataUnicaSchema = z
+  .object({
+    tipo: z.literal("DATA_UNICA"),
+    dataUnica: z.coerce.date({ message: "Informe uma data válida" }),
+    modoEscalacao: modoEscalacaoSchema.default("TODOS_ATIVOS"),
+    comunidadeResponsavel: z.string().trim().optional(),
+    ...missaCamposComuns,
+  })
+  .refine((d) => d.modoEscalacao !== "COMUNIDADE" || Boolean(d.comunidadeResponsavel && d.comunidadeResponsavel.length >= 2), {
+    message: "Informe a comunidade responsável",
+    path: ["comunidadeResponsavel"],
+  });
+
+export const missaSchema = z.discriminatedUnion("tipo", [missaRecorrenteSchema, missaDataUnicaSchema]);
 
 export const missaFuncaoRequisitoSchema = z.object({
   funcaoId: z.string().min(1),

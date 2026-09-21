@@ -5,15 +5,65 @@ import { redirect } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { generateId, nowIso } from "@/lib/db";
 import { missaSchema } from "@/lib/validations";
+import type { MissaInput } from "@/lib/validations";
 
 export type MissaFormState = { error?: string };
 
+// FormData.get devolve null pra campo ausente (ex: comunidadeResponsavel só
+// existe no form quando modoEscalacao é COMUNIDADE) — zod .optional()/.default()
+// só tratam undefined, não null, e rejeitavam com "expected string, received null".
+function campo(formData: FormData, nome: string) {
+  return formData.get(nome) ?? undefined;
+}
+
 function parseMissaForm(formData: FormData) {
+  const tipo = formData.get("tipo") === "DATA_UNICA" ? "DATA_UNICA" : "RECORRENTE";
+
+  if (tipo === "DATA_UNICA") {
+    return missaSchema.safeParse({
+      tipo,
+      dataUnica: campo(formData, "dataUnica"),
+      modoEscalacao: campo(formData, "modoEscalacao"),
+      comunidadeResponsavel: campo(formData, "comunidadeResponsavel"),
+      horario: campo(formData, "horario"),
+      comunidade: campo(formData, "comunidade"),
+    });
+  }
+
   return missaSchema.safeParse({
-    diaSemana: formData.get("diaSemana"),
-    horario: formData.get("horario"),
-    comunidade: formData.get("comunidade"),
+    tipo,
+    diaSemana: campo(formData, "diaSemana"),
+    horario: campo(formData, "horario"),
+    comunidade: campo(formData, "comunidade"),
   });
+}
+
+/**
+ * Sempre grava os 3 campos de "missa grande" explicitamente (mesmo em
+ * branco/false pra missa recorrente) — sem isso, editar uma missa grande de
+ * volta pra recorrente deixaria dataUnica/escalarTodosAtivos/comunidadeResponsavel
+ * "grudados" no banco.
+ */
+function paraLinhaDb(dados: MissaInput) {
+  if (dados.tipo === "DATA_UNICA") {
+    return {
+      diaSemana: dados.dataUnica.getUTCDay(),
+      horario: dados.horario,
+      comunidade: dados.comunidade,
+      dataUnica: dados.dataUnica.toISOString(),
+      escalarTodosAtivos: dados.modoEscalacao === "TODOS_ATIVOS",
+      comunidadeResponsavel: dados.modoEscalacao === "COMUNIDADE" ? dados.comunidadeResponsavel : null,
+    };
+  }
+
+  return {
+    diaSemana: dados.diaSemana,
+    horario: dados.horario,
+    comunidade: dados.comunidade,
+    dataUnica: null,
+    escalarTodosAtivos: false,
+    comunidadeResponsavel: null,
+  };
 }
 
 export async function createMissa(_prevState: MissaFormState, formData: FormData): Promise<MissaFormState> {
@@ -25,7 +75,7 @@ export async function createMissa(_prevState: MissaFormState, formData: FormData
   const id = generateId();
   const { error } = await supabase
     .from("Missa")
-    .insert({ id, ...parsed.data, updatedAt: nowIso() });
+    .insert({ id, ...paraLinhaDb(parsed.data), updatedAt: nowIso() });
   if (error) return { error: error.message };
 
   revalidatePath("/admin/missas");
@@ -44,7 +94,7 @@ export async function updateMissa(
 
   const { error } = await supabase
     .from("Missa")
-    .update({ ...parsed.data, updatedAt: nowIso() })
+    .update({ ...paraLinhaDb(parsed.data), updatedAt: nowIso() })
     .eq("id", id);
   if (error) return { error: error.message };
 

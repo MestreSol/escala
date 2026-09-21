@@ -4,6 +4,7 @@ import { MissaForm } from "@/components/admin/MissaForm";
 import { DeleteButton } from "@/components/admin/DeleteButton";
 import { Input } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
+import { ActionForm } from "@/components/ui/ActionForm";
 import { PRIORIDADE_LABEL, GRAU_LABEL } from "@/lib/constants";
 import type { FuncaoRow, MissaFuncaoRequisitoRow, MissaRow } from "@/lib/types";
 import { updateMissa, deleteMissa, saveMissaRequisitos } from "../actions";
@@ -40,7 +41,16 @@ export default async function EditarMissaPage({ params }: { params: Promise<{ id
     <div className="max-w-2xl space-y-10">
       <div>
         <h1 className="mb-6 text-2xl font-semibold text-gray-900">Editar missa</h1>
-        <MissaForm action={updateMissa.bind(null, missa.id)} defaultValues={missa} submitLabel="Salvar alterações" />
+        <MissaForm
+          action={updateMissa.bind(null, missa.id)}
+          defaultValues={{
+            ...missa,
+            // Âncora sempre em meia-noite UTC (ver lib/occurrences.ts); os 10
+            // primeiros caracteres já são o "yyyy-MM-dd" do <input type="date">.
+            dataUnica: missa.dataUnica?.slice(0, 10) ?? null,
+          }}
+          submitLabel="Salvar alterações"
+        />
       </div>
 
       <div>
@@ -52,7 +62,7 @@ export default async function EditarMissaPage({ params }: { params: Promise<{ id
         {funcoes.length === 0 ? (
           <p className="text-sm text-gray-500">Cadastre funções primeiro.</p>
         ) : (
-          <form action={salvarRequisitos} className="space-y-3">
+          <ActionForm action={salvarRequisitos} successMessage="Funções da missa salvas." className="space-y-3">
             {funcoes.map((funcao) => {
               const requisito = requisitoPorFuncao.get(funcao.id);
               return (
@@ -84,7 +94,7 @@ export default async function EditarMissaPage({ params }: { params: Promise<{ id
               );
             })}
             <Button type="submit">Salvar funções da missa</Button>
-          </form>
+          </ActionForm>
         )}
       </div>
 

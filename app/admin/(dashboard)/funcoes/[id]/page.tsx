@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { FuncaoForm } from "@/components/admin/FuncaoForm";
 import { Button } from "@/components/ui/Button";
+import { ActionForm } from "@/components/ui/ActionForm";
 import { getFuncoesQuePodeAssumir } from "@/lib/funcaoAcumulacao";
 import type { FuncaoRow } from "@/lib/types";
 import { updateFuncao, saveFuncaoAcumulacoes } from "../actions";
@@ -55,7 +56,7 @@ export default async function EditarFuncaoPage({ params }: { params: Promise<{ i
         {outrasFuncoes.length === 0 ? (
           <p className="text-sm text-gray-500">Cadastre outras funções para configurar acúmulos.</p>
         ) : (
-          <form action={salvarAcumulacoes} className="space-y-3">
+          <ActionForm action={salvarAcumulacoes} successMessage="Acúmulos salvos." className="space-y-3">
             {outrasFuncoes.map((outra) => (
               <label
                 key={outra.id}
@@ -71,7 +72,7 @@ export default async function EditarFuncaoPage({ params }: { params: Promise<{ i
               </label>
             ))}
             <Button type="submit">Salvar acúmulos</Button>
-          </form>
+          </ActionForm>
         )}
       </div>
     </div>

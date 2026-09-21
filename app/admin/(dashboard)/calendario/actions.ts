@@ -8,7 +8,13 @@ import { getVinculosMap } from "@/lib/servidorVinculo";
 import { getServidoresComFrequenciaBaixa } from "@/lib/frequencia";
 import { getIndisponibilidadesMap } from "@/lib/indisponibilidade";
 import { gerarDatasOcorrencia, combinarDataHorario, lerDataArmazenada } from "@/lib/occurrences";
-import { gerarEscala, diaChave, type SlotParaPreencher, type ServidorCandidato } from "@/lib/scheduleGenerator";
+import {
+  gerarEscala,
+  diaChave,
+  type SlotParaPreencher,
+  type ServidorCandidato,
+  type ModoEscalacao,
+} from "@/lib/scheduleGenerator";
 import type {
   EscalaAtribuicaoRow,
   FuncaoRow,
@@ -36,13 +42,22 @@ export async function materializarOcorrencias(periodoInicio: Date, periodoFim: D
     .returns<MissaRow[]>();
   if (missasError) throw missasError;
 
-  const linhas = (missas ?? []).flatMap((missa) =>
-    gerarDatasOcorrencia(missa.diaSemana, periodoInicio, periodoFim).map((data) => ({
+  const linhas = (missas ?? []).flatMap((missa) => {
+    // "Missa grande" (ver lib/scheduleGenerator.ts): evento de data única,
+    // fora do ciclo semanal — gera só a ocorrência dessa data, se ela cair
+    // dentro do período pedido. diaSemana é ignorado aqui.
+    if (missa.dataUnica) {
+      const data = lerDataArmazenada(missa.dataUnica);
+      if (data < periodoInicio || data > periodoFim) return [];
+      return [{ id: generateId(), missaId: missa.id, data: combinarDataHorario(data, missa.horario).toISOString() }];
+    }
+
+    return gerarDatasOcorrencia(missa.diaSemana, periodoInicio, periodoFim).map((data) => ({
       id: generateId(),
       missaId: missa.id,
       data: combinarDataHorario(data, missa.horario).toISOString(),
-    }))
-  );
+    }));
+  });
 
   if (linhas.length === 0) return;
 
@@ -58,10 +73,17 @@ export async function materializarOcorrencias(periodoInicio: Date, periodoFim: D
 async function montarSlotsEmAberto(periodoInicio: Date, periodoFim: Date) {
   const { data: ocorrencias, error: ocorrenciasError } = await supabase
     .from("MissaOcorrencia")
-    .select("id, missaId, data")
+    .select("id, missaId, data, missa:Missa(escalarTodosAtivos, comunidadeResponsavel)")
     .gte("data", periodoInicio.toISOString())
     .lte("data", periodoFim.toISOString())
-    .returns<{ id: string; missaId: string; data: string }[]>();
+    .returns<
+      {
+        id: string;
+        missaId: string;
+        data: string;
+        missa: { escalarTodosAtivos: boolean; comunidadeResponsavel: string | null };
+      }[]
+    >();
   if (ocorrenciasError) throw ocorrenciasError;
 
   const { data: requisitos, error: requisitosError } = await supabase
@@ -104,6 +126,12 @@ async function montarSlotsEmAberto(periodoInicio: Date, periodoFim: Date) {
   const slots: SlotParaPreencher[] = [];
   for (const ocorrencia of ocorrencias ?? []) {
     const reqs = requisitosPorMissa.get(ocorrencia.missaId) ?? [];
+    const modoEscalacao: ModoEscalacao = ocorrencia.missa.escalarTodosAtivos
+      ? "TODOS_ATIVOS"
+      : ocorrencia.missa.comunidadeResponsavel
+        ? "COMUNIDADE"
+        : "NORMAL";
+
     for (const req of reqs) {
       for (let slotIndex = 1; slotIndex <= req.quantidade; slotIndex++) {
         const chave = `${ocorrencia.id}:${req.funcaoId}:${slotIndex}`;
@@ -116,6 +144,8 @@ async function montarSlotsEmAberto(periodoInicio: Date, periodoFim: Date) {
           grauMinimo: req.funcao.grauMinimo,
           prioridade: req.funcao.prioridade,
           slotIndex,
+          modoEscalacao,
+          comunidadeResponsavel: ocorrencia.missa.comunidadeResponsavel ?? undefined,
         });
       }
     }
@@ -150,6 +180,7 @@ export async function gerarEscalaPeriodo(periodoInicioISO: string, periodoFimISO
   const servidores: ServidorCandidato[] = (servidoresDb ?? []).map((s) => ({
     id: s.id,
     categoria: s.categoria,
+    comunidade: s.comunidade,
     missaIdsPreferidas: new Set(s.preferenciasMissas.map((p) => p.missaId)),
     frequenciaBaixa: servidoresComFrequenciaBaixa.has(s.id),
     diasIndisponiveis: indisponibilidadesMap.get(s.id),

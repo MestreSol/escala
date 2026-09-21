@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input, Label, Select, FieldError } from "@/components/ui/Field";
+import { useActionToast } from "@/components/hooks/useActionToast";
 import type { UsuarioFormState } from "@/lib/types";
 
 type UsuarioFormProps = {
@@ -11,6 +12,7 @@ type UsuarioFormProps = {
 
 export function UsuarioForm({ action }: UsuarioFormProps) {
   const [state, formAction, pending] = useActionState(action, {});
+  useActionToast(state, pending, "Usuário criado.");
 
   return (
     <form action={formAction} className="max-w-md space-y-4">

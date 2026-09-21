@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { ServidorForm } from "@/components/ServidorForm";
 import { Button } from "@/components/ui/Button";
+import { ActionForm } from "@/components/ui/ActionForm";
 import { getVinculosDoServidor } from "@/lib/servidorVinculo";
 import type { MissaOption, ServidorMissaPreferenciaRow, ServidorRow } from "@/lib/types";
 import { updateServidor, saveServidorVinculos, atualizarFotoServidor } from "../actions";
@@ -23,6 +24,8 @@ export default async function EditarServidorPage({ params }: { params: Promise<{
       .from("Missa")
       .select("*")
       .eq("ativo", true)
+      // "Missas grandes" (dataUnica preenchida) não usam preferência (ver MissaForm).
+      .is("dataUnica", null)
       .order("diaSemana", { ascending: true })
       .order("horario", { ascending: true })
       .returns<MissaOption[]>(),
@@ -73,9 +76,9 @@ export default async function EditarServidorPage({ params }: { params: Promise<{
         <p className="mb-4 text-sm text-gray-500">
           Usada para identificação do servidor (ex: crachá, acompanhamento).
         </p>
-        <form
+        <ActionForm
           action={atualizarFotoServidor.bind(null, servidor.id)}
-          encType="multipart/form-data"
+          successMessage="Foto atualizada."
           className="flex items-center gap-6 rounded-xl border border-gray-200 bg-white p-6 shadow-sm"
         >
           {servidor.fotoUrl ? (
@@ -100,7 +103,7 @@ export default async function EditarServidorPage({ params }: { params: Promise<{
             />
             <Button type="submit">Salvar foto</Button>
           </div>
-        </form>
+        </ActionForm>
       </div>
 
       <div>
@@ -114,7 +117,11 @@ export default async function EditarServidorPage({ params }: { params: Promise<{
         {outrosServidores.length === 0 ? (
           <p className="text-sm text-gray-500">Cadastre outros servidores para configurar vínculos.</p>
         ) : (
-          <form action={salvarVinculos} className="space-y-3 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+          <ActionForm
+            action={salvarVinculos}
+            successMessage="Vínculos salvos."
+            className="space-y-3 rounded-xl border border-gray-200 bg-white p-6 shadow-sm"
+          >
             <div className="max-h-72 space-y-2 overflow-y-auto">
               {outrosServidores.map((outro) => (
                 <label
@@ -132,7 +139,7 @@ export default async function EditarServidorPage({ params }: { params: Promise<{
               ))}
             </div>
             <Button type="submit">Salvar vínculos</Button>
-          </form>
+          </ActionForm>
         )}
       </div>
     </div>

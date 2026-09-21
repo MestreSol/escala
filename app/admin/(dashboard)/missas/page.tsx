@@ -16,6 +16,7 @@ export default async function MissasPage() {
     .from("Missa")
     .select("*, funcoesRequisito:MissaFuncaoRequisito(*)")
     .eq("ativo", true)
+    .is("dataUnica", null)
     .order("diaSemana", { ascending: true })
     .order("horario", { ascending: true })
     .returns<MissaComRequisitos[]>();
@@ -25,7 +26,12 @@ export default async function MissasPage() {
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-gray-900">Missas</h1>
+        <div>
+          <h1 className="text-2xl font-semibold text-gray-900">Missas</h1>
+          <Link href="/admin/missas/grandes" className="text-sm text-blue-700 hover:text-blue-900">
+            Ver missas grandes (eventos de data única) →
+          </Link>
+        </div>
         <Link href="/admin/missas/nova">
           <Button>Nova missa</Button>
         </Link>

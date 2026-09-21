@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Field";
+import { ActionForm } from "@/components/ui/ActionForm";
 import { PresencaSelect } from "@/components/admin/PresencaSelect";
 import { DIAS_SEMANA } from "@/lib/constants";
 import { lerDataArmazenada, paraExibicao } from "@/lib/occurrences";
@@ -124,7 +125,7 @@ export default async function OcorrenciaDetailPage({
                       )}
                     </td>
                     <td className="px-4 py-3 text-sm">
-                      <form action={salvar} className="flex items-center gap-2">
+                      <ActionForm action={salvar} successMessage="Atribuição salva." className="flex items-center gap-2">
                         <Select name="servidorId" defaultValue={linha.servidorId ?? ""} className="w-48">
                           <option value="">Vaga em aberto</option>
                           {servidores.map((servidor) => (
@@ -136,7 +137,7 @@ export default async function OcorrenciaDetailPage({
                         <Button type="submit" variant="secondary" className="shrink-0">
                           Salvar
                         </Button>
-                      </form>
+                      </ActionForm>
                     </td>
                     <td className="px-4 py-3 text-sm">
                       {linha.servidorId ? (
