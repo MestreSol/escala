@@ -22,7 +22,7 @@ export function UsuarioForm({ action }: UsuarioFormProps) {
       </div>
       <div>
         <Label htmlFor="senha">Senha</Label>
-        <Input id="senha" name="senha" type="password" autoComplete="new-password" minLength={6} required />
+        <Input id="senha" name="senha" type="password" autoComplete="new-password" minLength={8} maxLength={128} required />
       </div>
       <div>
         <Label htmlFor="papel">Papel</Label>

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import clsx from "clsx";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
+import { linkGoogleAgenda, tituloDoEvento } from "@/lib/agenda";
 
 export type MissaPublica = {
   id: string;
@@ -25,7 +26,21 @@ const CHAVE_NOME_SALVO = "escala:meu-nome";
  * dele ficam destacadas, aparece um resumo no topo e dá pra filtrar só as
  * dele. O nome fica na URL (?nome=) e é lembrado neste navegador.
  */
-export function EscalaPublica({ missas, nomes, agora }: { missas: MissaPublica[]; nomes: string[]; agora: string }) {
+export function EscalaPublica({
+  missas,
+  nomes,
+  idPorNome,
+  origem,
+  agora,
+}: {
+  missas: MissaPublica[];
+  nomes: string[];
+  /** nome -> id do servidor, pra montar o link da agenda pessoal. */
+  idPorNome: Record<string, string>;
+  /** Ex: "https://escala.vercel.app" — base dos links de agenda. */
+  origem: string;
+  agora: string;
+}) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const nomeParam = searchParams.get("nome");
@@ -149,11 +164,42 @@ export function EscalaPublica({ missas, nomes, agora }: { missas: MissaPublica[]
                   <span className="text-muted">
                     {missa.diaRotulo} · <span className="tabular-nums text-accent">{missa.horario}</span>
                   </span>
-                  <span className="text-right font-medium text-fg">{funcoes.join(" + ")}</span>
+                  <span className="flex items-center gap-2 text-right font-medium text-fg">
+                    {funcoes.join(" + ")}
+                    {missa.inicio >= agora ? (
+                      <a
+                        href={linkGoogleAgenda({
+                          inicioLocal: missa.inicio,
+                          titulo: tituloDoEvento({
+                            funcoes: funcoes.map((f) => f.replace(/ #\d+$/, "")),
+                            todosAtivos: missa.todosAtivos,
+                          }),
+                          comunidade: missa.comunidade,
+                          detalhes: `Escala completa: ${origem}/escala`,
+                        })}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="Adicionar esta missa ao Google Agenda"
+                        className="rounded px-1 text-xs font-normal text-accent transition-colors hover:bg-accent-soft"
+                      >
+                        + Google
+                      </a>
+                    ) : null}
+                  </span>
                 </li>
               ))}
             </ul>
           ) : null}
+          {idPorNome[meuNome] ? (
+            <AdicionarAgenda servidorId={idPorNome[meuNome]} origem={origem} />
+          ) : (
+            // Nome só existe na escala (cópia salva na atribuição), sem cadastro
+            // ativo por trás — sem id não dá pra montar a agenda pessoal.
+            <p className="mt-4 border-t border-accent/20 pt-4 text-xs text-muted">
+              📅 Para adicionar à agenda, seu nome precisa estar no cadastro de servidores ativos. Fale com
+              a coordenação.
+            </p>
+          )}
         </section>
       ) : null}
 
@@ -258,5 +304,73 @@ function CartaoMissa({
         </ul>
       )}
     </article>
+  );
+}
+
+/**
+ * Agenda pessoal: assinando o link (Google/iPhone/Outlook), as missas da
+ * pessoa aparecem sozinhas e acompanham as mudanças da escala; o .ics é pra
+ * quem prefere importar uma vez.
+ */
+function AdicionarAgenda({ servidorId, origem }: { servidorId: string; origem: string }) {
+  const [aberto, setAberto] = useState(false);
+  const urlAgenda = `${origem}/escala/calendario/${servidorId}.ics`;
+  const urlWebcal = urlAgenda.replace(/^https?:/, "webcal:");
+  const opcoes = [
+    {
+      titulo: "Google Agenda",
+      descricao: "Android ou computador. Fica atualizando sozinho.",
+      href: `https://calendar.google.com/calendar/render?cid=${encodeURIComponent(urlWebcal)}`,
+      externo: true,
+    },
+    {
+      titulo: "iPhone, Mac ou Outlook",
+      descricao: "Abre o app de agenda e assina. Fica atualizando sozinho.",
+      href: urlWebcal,
+      externo: false,
+    },
+    {
+      titulo: "Baixar arquivo (.ics)",
+      descricao: "Importa uma vez — mudanças depois não aparecem.",
+      href: `${urlAgenda}?download=1`,
+      externo: false,
+    },
+  ];
+
+  return (
+    <div className="mt-4 border-t border-accent/20 pt-4">
+      <button
+        type="button"
+        onClick={() => setAberto((valor) => !valor)}
+        aria-expanded={aberto}
+        className="flex w-full items-center justify-between rounded-md text-sm font-medium text-accent transition-colors hover:text-accent-hover"
+      >
+        <span className="flex items-center gap-2">
+          <span aria-hidden>📅</span> Adicionar à minha agenda
+        </span>
+        <span aria-hidden className={clsx("transition-transform", aberto && "rotate-180")}>
+          ▾
+        </span>
+      </button>
+      {aberto ? (
+        <div className="mt-3 animate-fade-in space-y-2">
+          {opcoes.map((opcao) => (
+            <a
+              key={opcao.titulo}
+              href={opcao.href}
+              {...(opcao.externo ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+              className="block rounded-lg border border-line bg-surface px-3 py-2.5 transition-colors hover:border-accent/50"
+            >
+              <span className="block text-sm font-medium text-fg">{opcao.titulo}</span>
+              <span className="block text-xs text-muted">{opcao.descricao}</span>
+            </a>
+          ))}
+          <p className="pt-1 text-[11px] leading-relaxed text-subtle">
+            No Google Agenda as mudanças podem levar algumas horas pra aparecer — é o próprio Google que
+            decide quando buscar de novo.
+          </p>
+        </div>
+      ) : null}
+    </div>
   );
 }

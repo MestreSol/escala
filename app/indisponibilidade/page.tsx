@@ -8,7 +8,7 @@ import { CalendarioIndisponibilidade, type DiaCalendario } from "@/components/Ca
 import { diaChave } from "@/lib/scheduleGenerator";
 import { periodoDoMes, paraExibicao, lerDataArmazenada, agoraNaParoquia } from "@/lib/occurrences";
 import { getDatasIndisponiveisDoServidor } from "@/lib/servidorIndisponibilidade";
-import { materializarOcorrencias } from "@/app/admin/(dashboard)/calendario/actions";
+import { materializarOcorrencias } from "@/lib/materializarOcorrencias";
 import { listarMesesPublicados, primeiroMesAberto, somarMeses } from "@/lib/escalaPublicada";
 import { salvarIndisponibilidade } from "./actions";
 

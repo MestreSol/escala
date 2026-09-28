@@ -11,8 +11,8 @@ export type SessaoPayload = {
   papel: PapelUsuario;
 };
 
-// Este módulo é importado pelo middleware (roda no Edge), então só pode usar
-// APIs compatíveis com Edge — nada de bcrypt/supabase aqui. Consultas ao
+// Este módulo é importado pelo proxy (proxy.ts), então fica enxuto — nada de
+// bcrypt/supabase aqui. Consultas ao
 // Usuario (login, gestão) ficam em lib/sessao.ts e nas actions.
 function getSecretKey() {
   const secret = process.env.SESSION_SECRET;

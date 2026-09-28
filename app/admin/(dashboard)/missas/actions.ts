@@ -1,9 +1,10 @@
 "use server";
 
+import { exigirUsuario } from "@/lib/sessao";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import { generateId, nowIso } from "@/lib/db";
+import { generateId, nowIso, erroDoBanco } from "@/lib/db";
 import { missaSchema } from "@/lib/validations";
 import type { MissaInput } from "@/lib/validations";
 import { parseDataUnica } from "@/lib/occurrences";
@@ -71,6 +72,7 @@ function paraLinhaDb(dados: MissaInput) {
 }
 
 export async function createMissa(_prevState: MissaFormState, formData: FormData): Promise<MissaFormState> {
+  await exigirUsuario();
   const parsed = parseMissaForm(formData);
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
@@ -80,7 +82,7 @@ export async function createMissa(_prevState: MissaFormState, formData: FormData
   const { error } = await supabase
     .from("Missa")
     .insert({ id, ...paraLinhaDb(parsed.data), updatedAt: nowIso() });
-  if (error) return { error: error.message };
+  if (error) return erroDoBanco(error, "missa");
 
   revalidatePath("/admin/missas");
   redirect(`/admin/missas/${id}`);
@@ -91,6 +93,7 @@ export async function updateMissa(
   _prevState: MissaFormState,
   formData: FormData
 ): Promise<MissaFormState> {
+  await exigirUsuario();
   const parsed = parseMissaForm(formData);
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
@@ -100,7 +103,7 @@ export async function updateMissa(
     .from("Missa")
     .update({ ...paraLinhaDb(parsed.data), updatedAt: nowIso() })
     .eq("id", id);
-  if (error) return { error: error.message };
+  if (error) return erroDoBanco(error, "missa");
 
   revalidatePath("/admin/missas");
   revalidatePath(`/admin/missas/${id}`);
@@ -108,6 +111,7 @@ export async function updateMissa(
 }
 
 export async function deleteMissa(id: string) {
+  await exigirUsuario();
   const { error } = await supabase.from("Missa").delete().eq("id", id);
   if (error) throw error;
 
@@ -116,6 +120,7 @@ export async function deleteMissa(id: string) {
 }
 
 export async function saveMissaRequisitos(missaId: string, formData: FormData) {
+  await exigirUsuario();
   const { data: funcoes, error: funcoesError } = await supabase
     .from("Funcao")
     .select("id")

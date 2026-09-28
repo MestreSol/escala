@@ -1,9 +1,10 @@
 "use server";
 
+import { exigirUsuario } from "@/lib/sessao";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import { generateId, nowIso } from "@/lib/db";
+import { generateId, nowIso, erroDoBanco } from "@/lib/db";
 import { servidorSchema } from "@/lib/validations";
 import { setVinculosDoServidor } from "@/lib/servidorVinculo";
 import { enviarFotoServidor } from "@/lib/storage";
@@ -14,6 +15,7 @@ export async function updateServidor(
   _prevState: ServidorFormState,
   formData: FormData
 ): Promise<ServidorFormState> {
+  await exigirUsuario();
   const parsed = servidorSchema.safeParse({
     nome: formData.get("nome"),
     dataNascimento: formData.get("dataNascimento"),
@@ -32,19 +34,19 @@ export async function updateServidor(
     .from("Servidor")
     .update({ ...servidorData, updatedAt: nowIso() })
     .eq("id", id);
-  if (updateError) return { error: updateError.message };
+  if (updateError) return erroDoBanco(updateError, "servidor");
 
   const { error: deleteError } = await supabase
     .from("ServidorMissaPreferencia")
     .delete()
     .eq("servidorId", id);
-  if (deleteError) return { error: deleteError.message };
+  if (deleteError) return erroDoBanco(deleteError, "servidor");
 
   if (missaIds.length > 0) {
     const { error: insertError } = await supabase
       .from("ServidorMissaPreferencia")
       .insert(missaIds.map((missaId) => ({ id: generateId(), servidorId: id, missaId })));
-    if (insertError) return { error: insertError.message };
+    if (insertError) return erroDoBanco(insertError, "servidor");
   }
 
   revalidatePath("/admin/servidores");
@@ -52,6 +54,7 @@ export async function updateServidor(
 }
 
 export async function saveServidorVinculos(servidorId: string, formData: FormData) {
+  await exigirUsuario();
   const { data: outrosServidores, error } = await supabase
     .from("Servidor")
     .select("id")
@@ -70,6 +73,7 @@ export async function saveServidorVinculos(servidorId: string, formData: FormDat
 }
 
 export async function atualizarFotoServidor(servidorId: string, formData: FormData) {
+  await exigirUsuario();
   const arquivo = formData.get("foto");
   if (!(arquivo instanceof File) || arquivo.size === 0) {
     throw new Error("Selecione uma imagem.");
@@ -85,6 +89,7 @@ export async function atualizarFotoServidor(servidorId: string, formData: FormDa
 }
 
 export async function deleteServidor(id: string) {
+  await exigirUsuario();
   const { error } = await supabase.from("Servidor").delete().eq("id", id);
   if (error) throw error;
 

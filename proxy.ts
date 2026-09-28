@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { SESSION_COOKIE_NAME, verificarSessionToken } from "@/lib/auth";
 
-export async function middleware(request: NextRequest) {
+/**
+ * Protege as PÁGINAS do painel (/admin/*): sem sessão válida, manda pro login.
+ * Não protege Server Actions — cada action confere o usuário de novo (ver
+ * exigirUsuario em lib/sessao.ts).
+ */
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (pathname === "/admin/login") {

@@ -17,8 +17,8 @@ async function main() {
     console.error("Uso: npm run criar-usuario -- <username> <senha> [ADMIN|OPERADOR]");
     process.exit(1);
   }
-  if (senha.length < 6) {
-    console.error("A senha deve ter pelo menos 6 caracteres.");
+  if (senha.length < 8) {
+    console.error("A senha deve ter pelo menos 8 caracteres.");
     process.exit(1);
   }
   if (papel !== "ADMIN" && papel !== "OPERADOR") {

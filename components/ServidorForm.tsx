@@ -133,6 +133,13 @@ export function ServidorForm({ action, missas, defaultValues, submitLabel }: Ser
         )}
       </div>
 
+      {/* Armadilha pra robô de spam: invisível e fora do Tab, gente não preenche
+          (ver createServidor em app/inscricao/actions.ts). */}
+      <div aria-hidden className="absolute -left-[9999px] h-px w-px overflow-hidden">
+        <label htmlFor="site">Não preencha este campo</label>
+        <input id="site" name="site" type="text" tabIndex={-1} autoComplete="off" defaultValue="" />
+      </div>
+
       <FieldError>{state.error}</FieldError>
       <SubmitButton pending={pending} pendingLabel="Enviando" className="w-full">
         {submitLabel}

@@ -1,5 +1,6 @@
 "use server";
 
+import { exigirUsuario } from "@/lib/sessao";
 import { revalidatePath } from "next/cache";
 import { supabase } from "@/lib/supabase";
 import { generateId, nowIso } from "@/lib/db";
@@ -8,12 +9,8 @@ import { getVinculosMap } from "@/lib/servidorVinculo";
 import { getServidoresComFrequenciaBaixa } from "@/lib/frequencia";
 import { getIndisponibilidadeMap } from "@/lib/servidorIndisponibilidade";
 import { publicarMes, despublicarMes } from "@/lib/escalaPublicada";
-import {
-  gerarDatasOcorrencia,
-  gerarDataOcorrenciaUnica,
-  combinarDataHorario,
-  lerDataArmazenada,
-} from "@/lib/occurrences";
+import { materializarOcorrencias } from "@/lib/materializarOcorrencias";
+import { lerDataArmazenada } from "@/lib/occurrences";
 import {
   gerarEscala,
   diaChave,
@@ -25,7 +22,6 @@ import type {
   EscalaAtribuicaoRow,
   FuncaoRow,
   MissaFuncaoRequisitoRow,
-  MissaRow,
   ServidorMissaPreferenciaRow,
   ServidorRow,
 } from "@/lib/types";
@@ -37,40 +33,6 @@ type AtribuicaoExistente = {
   servidorId: string | null;
   data: Date;
 };
-
-export async function materializarOcorrencias(periodoInicio: Date, periodoFim: Date) {
-  const { data: missas, error: missasError } = await supabase
-    .from("Missa")
-    .select("*")
-    .eq("ativo", true)
-    .returns<MissaRow[]>();
-  if (missasError) throw missasError;
-
-  const linhas = (missas ?? []).flatMap((missa) => {
-    // Semanal: toda ocorrência do dia da semana no período. Data única
-    // ("missa grande"): só aquela data, se cair dentro do período.
-    const datas =
-      missa.diaSemana !== null
-        ? gerarDatasOcorrencia(missa.diaSemana, periodoInicio, periodoFim)
-        : gerarDataOcorrenciaUnica(lerDataArmazenada(missa.dataUnica!), periodoInicio, periodoFim);
-
-    return datas.map((data) => ({
-      id: generateId(),
-      missaId: missa.id,
-      data: combinarDataHorario(data, missa.horario).toISOString(),
-    }));
-  });
-
-  if (linhas.length === 0) return;
-
-  // Só insere quem ainda não existe (ON CONFLICT DO NOTHING) — não há campo
-  // para atualizar aqui, e preserva o id (e portanto as atribuições já
-  // vinculadas) das ocorrências que já existiam.
-  const { error } = await supabase
-    .from("MissaOcorrencia")
-    .upsert(linhas, { onConflict: "missaId,data", ignoreDuplicates: true });
-  if (error) throw error;
-}
 
 async function montarSlotsEmAberto(periodoInicio: Date, periodoFim: Date) {
   const { data: ocorrencias, error: ocorrenciasError } = await supabase
@@ -168,6 +130,7 @@ async function montarSlotsEmAberto(periodoInicio: Date, periodoFim: Date) {
 }
 
 export async function gerarEscalaPeriodo(periodoInicioISO: string, periodoFimISO: string) {
+  await exigirUsuario();
   const periodoInicio = new Date(periodoInicioISO);
   const periodoFim = new Date(periodoFimISO);
 
@@ -309,6 +272,7 @@ export async function atualizarAtribuicaoManual(
   slotIndex: number,
   formData: FormData
 ) {
+  await exigirUsuario();
   const servidorId = String(formData.get("servidorId") ?? "").trim() || null;
 
   let servidorNomeSnapshot: string | null = null;
@@ -365,6 +329,7 @@ export async function registrarPresenca(
   slotIndex: number,
   formData: FormData
 ) {
+  await exigirUsuario();
   const valor = String(formData.get("presente") ?? "");
   const presente = valor === "" ? null : valor === "true";
 
@@ -388,6 +353,7 @@ export async function registrarPresenca(
  * (que só mexe no sistema normal de função/vaga) nunca apagar essa lista.
  */
 export async function escalarTodosAtivos(ocorrenciaId: string) {
+  await exigirUsuario();
   const [{ data: servidores, error: servidoresError }, { data: existentes, error: existentesError }] =
     await Promise.all([
       supabase.from("Servidor").select("id, nome").eq("ativo", true).returns<{ id: string; nome: string }[]>(),
@@ -427,6 +393,7 @@ export async function escalarTodosAtivos(ocorrenciaId: string) {
 
 /** Adiciona manualmente um único servidor à lista de presença simples (ex: alguém fora dos ativos no momento do "escalar todos"). */
 export async function adicionarNaListaTodosAtivos(ocorrenciaId: string, formData: FormData) {
+  await exigirUsuario();
   const servidorId = String(formData.get("servidorId") ?? "").trim();
   if (!servidorId) return;
 
@@ -465,6 +432,7 @@ export async function adicionarNaListaTodosAtivos(ocorrenciaId: string, formData
 
 /** Remove uma linha da lista de presença simples (ex: alguém avisou que não vai mais). */
 export async function removerDaListaTodosAtivos(ocorrenciaId: string, atribuicaoId: string) {
+  await exigirUsuario();
   const { error } = await supabase.from("EscalaAtribuicao").delete().eq("id", atribuicaoId);
   if (error) throw error;
 
@@ -473,6 +441,7 @@ export async function removerDaListaTodosAtivos(ocorrenciaId: string, atribuicao
 
 /** Registra presença numa linha da lista simples (endereça por id — não há função/slotIndex útil pra chave composta aqui). */
 export async function registrarPresencaTodosAtivos(ocorrenciaId: string, atribuicaoId: string, formData: FormData) {
+  await exigirUsuario();
   const valor = String(formData.get("presente") ?? "");
   const presente = valor === "" ? null : valor === "true";
 
@@ -487,6 +456,7 @@ export async function registrarPresencaTodosAtivos(ocorrenciaId: string, atribui
 }
 
 export async function regenerarEscalaPeriodo(periodoInicioISO: string, periodoFimISO: string) {
+  await exigirUsuario();
   const periodoInicio = new Date(periodoInicioISO);
   const periodoFim = new Date(periodoFimISO);
 
@@ -522,6 +492,7 @@ export async function regenerarEscalaPeriodo(periodoInicioISO: string, periodoFi
  * é preciso liberar todos os slots antes de gerar de novo.
  */
 export async function apagarEscalaPeriodo(periodoInicioISO: string, periodoFimISO: string) {
+  await exigirUsuario();
   const periodoInicio = new Date(periodoInicioISO);
   const periodoFim = new Date(periodoFimISO);
 
@@ -544,6 +515,7 @@ export async function apagarEscalaPeriodo(periodoInicioISO: string, periodoFimIS
 
 /** Libera a escala do mês ("yyyy-MM") na página pública /escala. */
 export async function publicarEscalaMes(mes: string) {
+  await exigirUsuario();
   await publicarMes(mes);
   revalidatePath("/admin/calendario");
   revalidatePath("/escala");
@@ -551,6 +523,7 @@ export async function publicarEscalaMes(mes: string) {
 
 /** Tira o mês da página pública (a escala continua no banco, só fica oculta). */
 export async function despublicarEscalaMes(mes: string) {
+  await exigirUsuario();
   await despublicarMes(mes);
   revalidatePath("/admin/calendario");
   revalidatePath("/escala");

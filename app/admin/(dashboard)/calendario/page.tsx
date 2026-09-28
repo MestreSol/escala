@@ -19,8 +19,8 @@ import type { EscalaAtribuicaoRow, MissaFuncaoRequisitoRow, MissaRow, MissaOcorr
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { ActionForm } from "@/components/ui/ActionForm";
 import { mesEstaPublicado } from "@/lib/escalaPublicada";
+import { materializarOcorrencias } from "@/lib/materializarOcorrencias";
 import {
-  materializarOcorrencias,
   gerarEscalaPeriodo,
   regenerarEscalaPeriodo,
   apagarEscalaPeriodo,

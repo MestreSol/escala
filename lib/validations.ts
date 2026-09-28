@@ -52,20 +52,28 @@ export const missaFuncaoRequisitoSchema = z.object({
 });
 
 export const servidorSchema = z.object({
-  nome: z.string().trim().min(2, "Informe o nome"),
+  nome: z.string().trim().min(2, "Informe o nome").max(100, "Nome muito longo"),
   dataNascimento: z.coerce
     .date({ message: "Informe uma data de nascimento válida" })
-    .max(new Date(), { message: "Data de nascimento não pode ser no futuro" }),
-  comunidade: z.string().trim().min(2, "Informe a comunidade"),
+    .min(new Date("1900-01-01"), { message: "Informe uma data de nascimento válida" })
+    // refine (e não .max(new Date())) pra "hoje" ser avaliado a cada envio,
+    // não uma vez só quando o servidor sobe.
+    .refine((data) => data <= new Date(), { message: "Data de nascimento não pode ser no futuro" }),
+  comunidade: z.string().trim().min(2, "Informe a comunidade").max(80, "Nome de comunidade muito longo"),
   categoria: z.enum(["COROINHA", "ACOLITO", "CERIMONIARIO"], {
     message: "Selecione a categoria do servidor",
   }),
-  missaIds: z.array(z.string()).min(1, "Selecione pelo menos uma missa"),
+  missaIds: z.array(z.string().max(64)).min(1, "Selecione pelo menos uma missa").max(30),
 });
 
 export const usuarioSchema = z.object({
-  username: z.string().trim().min(3, "Informe um usuário com pelo menos 3 caracteres"),
-  senha: z.string().min(6, "A senha deve ter pelo menos 6 caracteres"),
+  username: z
+    .string()
+    .trim()
+    .min(3, "Informe um usuário com pelo menos 3 caracteres")
+    .max(64, "Usuário muito longo")
+    .regex(/^[a-zA-Z0-9._-]+$/, "Use só letras, números, ponto, hífen ou _"),
+  senha: z.string().min(8, "A senha deve ter pelo menos 8 caracteres").max(128, "Senha muito longa"),
   papel: z.enum(["ADMIN", "OPERADOR"]),
 });
 

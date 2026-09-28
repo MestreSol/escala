@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import bcrypt from "bcryptjs";
 import { supabase } from "@/lib/supabase";
-import { generateId, nowIso } from "@/lib/db";
+import { generateId, nowIso, erroDoBanco } from "@/lib/db";
 import { usuarioSchema } from "@/lib/validations";
 import { exigirAdmin } from "@/lib/sessao";
 import type { UsuarioFormState } from "@/lib/types";
@@ -31,7 +31,7 @@ export async function createUsuario(_prevState: UsuarioFormState, formData: Form
   });
   if (error) {
     if (error.code === "23505") return { error: "Já existe um usuário com esse nome." };
-    return { error: error.message };
+    return erroDoBanco(error, "usuário");
   }
 
   revalidatePath("/admin/usuarios");

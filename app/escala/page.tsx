@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { headers } from "next/headers";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { supabase } from "@/lib/supabase";
@@ -21,6 +22,11 @@ function nomeDoMes(mes: string) {
 
 export default async function EscalaPublicaPage({ searchParams }: { searchParams: Promise<{ mes?: string }> }) {
   const { mes: mesParam } = await searchParams;
+  // Origem pública do site (ex: https://escala.vercel.app), pros links de agenda.
+  const cabecalhos = await headers();
+  const host = cabecalhos.get("x-forwarded-host") ?? cabecalhos.get("host") ?? "localhost:3000";
+  const protocolo = cabecalhos.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
+  const origem = `${protocolo}://${host}`;
   const publicados = await listarMesesPublicados(); // mais recente primeiro
   const agora = agoraNaParoquia();
   const mesDeHoje = agora.slice(0, 7);
@@ -41,11 +47,13 @@ export default async function EscalaPublicaPage({ searchParams }: { searchParams
 
   let missas: MissaPublica[] = [];
   let nomes: string[] = [];
+  // nome -> id do servidor, pro link da agenda pessoal (/escala/calendario/<id>.ics).
+  let idPorNome: Record<string, string> = {};
   if (publicado) {
     const { periodoInicio, periodoFim } = periodoDoMes(mes);
     const [ocorrencias, servidoresResult] = await Promise.all([
       buscarEscalaDoPeriodo(periodoInicio, periodoFim),
-      supabase.from("Servidor").select("nome").eq("ativo", true).returns<{ nome: string }[]>(),
+      supabase.from("Servidor").select("id, nome").eq("ativo", true).returns<{ id: string; nome: string }[]>(),
     ]);
     if (servidoresResult.error) throw servidoresResult.error;
 
@@ -63,6 +71,7 @@ export default async function EscalaPublicaPage({ searchParams }: { searchParams
       })),
     }));
 
+    idPorNome = Object.fromEntries((servidoresResult.data ?? []).map((s) => [s.nome, s.id]));
     nomes = [
       ...new Set([
         ...(servidoresResult.data ?? []).map((s) => s.nome),
@@ -103,7 +112,7 @@ export default async function EscalaPublicaPage({ searchParams }: { searchParams
         </header>
 
         {publicado ? (
-          <EscalaPublica missas={missas} nomes={nomes} agora={agora} />
+          <EscalaPublica missas={missas} nomes={nomes} idPorNome={idPorNome} origem={origem} agora={agora} />
         ) : (
           <div className="mx-auto max-w-md rounded-2xl border border-line bg-surface p-8 text-center">
             <p className="font-medium text-fg">

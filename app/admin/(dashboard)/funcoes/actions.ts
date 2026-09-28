@@ -1,9 +1,10 @@
 "use server";
 
+import { exigirUsuario } from "@/lib/sessao";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import { generateId, nowIso } from "@/lib/db";
+import { generateId, nowIso, erroDoBanco } from "@/lib/db";
 import { funcaoSchema } from "@/lib/validations";
 import { setFuncoesQuePodeAssumir } from "@/lib/funcaoAcumulacao";
 
@@ -20,6 +21,7 @@ function parseFuncaoForm(formData: FormData) {
 }
 
 export async function createFuncao(_prevState: FuncaoFormState, formData: FormData): Promise<FuncaoFormState> {
+  await exigirUsuario();
   const parsed = parseFuncaoForm(formData);
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
@@ -28,7 +30,7 @@ export async function createFuncao(_prevState: FuncaoFormState, formData: FormDa
   const { error } = await supabase
     .from("Funcao")
     .insert({ id: generateId(), ...parsed.data, updatedAt: nowIso() });
-  if (error) return { error: error.message };
+  if (error) return erroDoBanco(error, "função");
 
   revalidatePath("/admin/funcoes");
   redirect("/admin/funcoes");
@@ -39,6 +41,7 @@ export async function updateFuncao(
   _prevState: FuncaoFormState,
   formData: FormData
 ): Promise<FuncaoFormState> {
+  await exigirUsuario();
   const parsed = parseFuncaoForm(formData);
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
@@ -48,7 +51,7 @@ export async function updateFuncao(
     .from("Funcao")
     .update({ ...parsed.data, updatedAt: nowIso() })
     .eq("id", id);
-  if (error) return { error: error.message };
+  if (error) return erroDoBanco(error, "função");
 
   revalidatePath("/admin/funcoes");
   revalidatePath(`/admin/funcoes/${id}`);
@@ -56,6 +59,7 @@ export async function updateFuncao(
 }
 
 export async function deleteFuncao(id: string) {
+  await exigirUsuario();
   const { error } = await supabase.from("Funcao").delete().eq("id", id);
   if (error) throw error;
 
@@ -64,6 +68,7 @@ export async function deleteFuncao(id: string) {
 }
 
 export async function saveFuncaoAcumulacoes(funcaoId: string, formData: FormData) {
+  await exigirUsuario();
   const { data: outrasFuncoes, error } = await supabase
     .from("Funcao")
     .select("id")
