@@ -15,7 +15,7 @@ const missaCamposComuns = {
 
 /**
  * Quem serve numa missa (ver Missa no schema e lib/scheduleGenerator.ts):
- * NORMAL = sorteio entre quem marcou a missa como preferida (só semanais);
+ * NORMAL = sorteio entre quem marcou a missa como preferida (semanais e mensais);
  * TODOS_ATIVOS = sorteio das funções entre todos os ativos (só data única);
  * COMUNIDADE = sorteio só entre a comunidade responsável (só data única);
  * LISTA_TODOS = sem funções, todo ativo numa lista de presença ("TODOS OS COROINHAS").
@@ -26,6 +26,14 @@ export type ModoMissa = z.infer<typeof modoEscalacaoSchema>;
 const missaRecorrenteSchema = z.object({
   tipo: z.literal("RECORRENTE"),
   diaSemana: z.coerce.number().int().min(0).max(6),
+  modoEscalacao: z.enum(["NORMAL", "LISTA_TODOS"]).default("NORMAL"),
+  ...missaCamposComuns,
+});
+
+const missaMensalSchema = z.object({
+  tipo: z.literal("MENSAL"),
+  diaSemana: z.coerce.number().int().min(0).max(6),
+  semanaDoMes: z.coerce.number().int().min(1).max(5),
   modoEscalacao: z.enum(["NORMAL", "LISTA_TODOS"]).default("NORMAL"),
   ...missaCamposComuns,
 });
@@ -44,7 +52,7 @@ const missaDataUnicaSchema = z
     path: ["comunidadeResponsavel"],
   });
 
-export const missaSchema = z.discriminatedUnion("tipo", [missaRecorrenteSchema, missaDataUnicaSchema]);
+export const missaSchema = z.discriminatedUnion("tipo", [missaRecorrenteSchema, missaMensalSchema, missaDataUnicaSchema]);
 
 export const missaFuncaoRequisitoSchema = z.object({
   funcaoId: z.string().min(1),

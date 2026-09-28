@@ -89,7 +89,56 @@ export function gerarDataOcorrenciaUnica(dataUnica: Date, periodoInicio: Date, p
 }
 
 /** Rótulo do "dia" de uma missa pra exibição: dia da semana, ou a data única formatada. */
-export function formatarDiaMissa(missa: { diaSemana: number | null; dataUnica: string | null }): string {
+/** Rótulo curto de `Missa.semanaDoMes`: 1-4 = "1ª".."4ª", 5 = "Última". */
+export const SEMANAS_DO_MES = ["1ª", "2ª", "3ª", "4ª", "Última"] as const;
+
+/**
+ * Datas (meia-noite UTC) de uma missa MENSAL dentro do período: o N-ésimo
+ * `diaSemana` de cada mês (ex: 1ª sexta-feira). `semanaDoMes` 1-4 conta a
+ * partir do início do mês; 5 = a última ocorrência daquele dia no mês.
+ */
+export function gerarDatasOcorrenciaMensal(
+  diaSemana: number,
+  semanaDoMes: number,
+  periodoInicio: Date,
+  periodoFim: Date
+): Date[] {
+  const datas: Date[] = [];
+  let ano = periodoInicio.getUTCFullYear();
+  let mes = periodoInicio.getUTCMonth();
+  const inicio = Date.UTC(periodoInicio.getUTCFullYear(), periodoInicio.getUTCMonth(), periodoInicio.getUTCDate());
+  const fim = Date.UTC(periodoFim.getUTCFullYear(), periodoFim.getUTCMonth(), periodoFim.getUTCDate());
+
+  while (Date.UTC(ano, mes, 1) <= fim) {
+    let data: Date;
+    if (semanaDoMes >= 5) {
+      const ultimoDia = new Date(Date.UTC(ano, mes + 1, 0));
+      const recuo = (ultimoDia.getUTCDay() - diaSemana + 7) % 7;
+      data = new Date(Date.UTC(ano, mes, ultimoDia.getUTCDate() - recuo));
+    } else {
+      const primeiroDia = new Date(Date.UTC(ano, mes, 1));
+      const avanco = (diaSemana - primeiroDia.getUTCDay() + 7) % 7;
+      data = new Date(Date.UTC(ano, mes, 1 + avanco + (semanaDoMes - 1) * 7));
+    }
+    if (data.getTime() >= inicio && data.getTime() <= fim) datas.push(data);
+    mes += 1;
+    if (mes > 11) {
+      mes = 0;
+      ano += 1;
+    }
+  }
+  return datas;
+}
+
+export function formatarDiaMissa(missa: {
+  diaSemana: number | null;
+  dataUnica: string | null;
+  semanaDoMes?: number | null;
+}): string {
+  if (missa.diaSemana !== null && missa.semanaDoMes) {
+    const semana = SEMANAS_DO_MES[missa.semanaDoMes - 1] ?? `${missa.semanaDoMes}ª`;
+    return `${semana} ${DIAS_SEMANA[missa.diaSemana].toLowerCase()} do mês`;
+  }
   if (missa.diaSemana !== null) return DIAS_SEMANA[missa.diaSemana];
   if (missa.dataUnica) return format(paraExibicao(lerDataArmazenada(missa.dataUnica)), "dd/MM/yyyy");
   return "—";

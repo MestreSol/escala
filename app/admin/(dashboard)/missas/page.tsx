@@ -8,7 +8,6 @@ import { DataTable } from "@/components/ui/DataTable";
 import type { MissaFuncaoRequisitoRow, MissaRow } from "@/lib/types";
 import { deleteMissa } from "./actions";
 
-// Página lê dados do banco a cada acesso — nunca deve ser congelada em build.
 export const dynamic = "force-dynamic";
 
 type MissaComRequisitos = MissaRow & { funcoesRequisito: MissaFuncaoRequisitoRow[] };
@@ -52,11 +51,9 @@ export default async function MissasPage() {
         linhas={missas.map((missa) => ({
           id: missa.id,
           valores: {
-            // Semanais primeiro (0-6 pelo dia da semana, desempate pelo
-            // horário); datas únicas depois, em ordem cronológica.
             dia: missa.dataUnica
-              ? `1-${missa.dataUnica}-${missa.horario}`
-              : `0-${missa.diaSemana ?? 9}-${missa.horario}`,
+              ? `2-${missa.dataUnica}-${missa.horario}`
+              : `${missa.semanaDoMes ? 1 : 0}-${missa.diaSemana ?? 9}-${missa.semanaDoMes ?? 0}-${missa.horario}`,
             horario: missa.horario,
             comunidade: missa.comunidade,
             // "Todos os ativos" não tem vagas por função — fica antes de todas.

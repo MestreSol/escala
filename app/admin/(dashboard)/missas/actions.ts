@@ -11,15 +11,13 @@ import { parseDataUnica } from "@/lib/occurrences";
 
 export type MissaFormState = { error?: string };
 
-// FormData.get devolve null pra campo ausente (ex: comunidadeResponsavel só
-// existe no form quando o modo é COMUNIDADE) — zod .optional()/.default()
-// só tratam undefined, não null, e rejeitavam com "expected string, received null".
 function campo(formData: FormData, nome: string) {
   return formData.get(nome) ?? undefined;
 }
 
 function parseMissaForm(formData: FormData) {
-  const tipo = formData.get("tipo") === "DATA_UNICA" ? "DATA_UNICA" : "RECORRENTE";
+  const tipoEnviado = formData.get("tipo");
+  const tipo = tipoEnviado === "DATA_UNICA" || tipoEnviado === "MENSAL" ? tipoEnviado : "RECORRENTE";
 
   if (tipo === "DATA_UNICA") {
     return missaSchema.safeParse({
@@ -35,24 +33,20 @@ function parseMissaForm(formData: FormData) {
   return missaSchema.safeParse({
     tipo,
     diaSemana: campo(formData, "diaSemana"),
+    semanaDoMes: tipo === "MENSAL" ? campo(formData, "semanaDoMes") : undefined,
     modoEscalacao: campo(formData, "modoEscalacao"),
     horario: campo(formData, "horario"),
     comunidade: campo(formData, "comunidade"),
   });
 }
 
-/**
- * Sempre grava todos os campos de recorrência/modo explicitamente — sem isso,
- * trocar uma missa de data única pra semanal (ou mudar o modo) deixaria
- * dataUnica/escalarTodosAtivos/comunidadeResponsavel "grudados" no banco.
- * diaSemana e dataUnica são exclusivos: só um fica preenchido.
- */
 function paraLinhaDb(dados: MissaInput) {
   const escalarTodosAtivos = dados.modoEscalacao === "LISTA_TODOS";
 
   if (dados.tipo === "DATA_UNICA") {
     return {
       diaSemana: null,
+      semanaDoMes: null,
       dataUnica: parseDataUnica(dados.dataUnica).toISOString(),
       horario: dados.horario,
       comunidade: dados.comunidade,
@@ -63,6 +57,7 @@ function paraLinhaDb(dados: MissaInput) {
 
   return {
     diaSemana: dados.diaSemana,
+    semanaDoMes: dados.tipo === "MENSAL" ? dados.semanaDoMes : null,
     dataUnica: null,
     horario: dados.horario,
     comunidade: dados.comunidade,

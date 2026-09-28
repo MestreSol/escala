@@ -15,6 +15,7 @@ export type UsuarioRow = {
 export type MissaOption = {
   id: string;
   diaSemana: number | null;
+  semanaDoMes: number | null;
   dataUnica: string | null;
   horario: string;
   comunidade: string;
@@ -38,6 +39,7 @@ export type FuncaoRow = {
 export type MissaRow = {
   id: string;
   diaSemana: number | null;
+  semanaDoMes: number | null;
   dataUnica: string | null;
   horario: string;
   comunidade: string;

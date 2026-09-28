@@ -74,6 +74,9 @@ model Missa {
   /// Recorrência semanal (0-6, domingo-sábado). Exclusivo com `dataUnica` —
   /// toda missa tem exatamente um dos dois preenchido.
   diaSemana             Int?
+  /// Missa MENSAL: com diaSemana, vira "a N-ésima <diaSemana> do mês" (ex:
+  /// 1ª sexta-feira). 1-4 = 1ª..4ª, 5 = última. Nulo = semanal toda semana.
+  semanaDoMes           Int?
   /// Data única (âncora UTC meia-noite, como MissaOcorrencia.data — ver
   /// lib/occurrences.ts): "missa grande" de evento único (ex: Natal, Nossa
   /// Senhora Aparecida), fora do ciclo semanal. Exclusivo com `diaSemana`.

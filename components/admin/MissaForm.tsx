@@ -5,15 +5,18 @@ import { SubmitButton } from "@/components/ui/SubmitButton";
 import { Input, Label, Select, FieldError } from "@/components/ui/Field";
 import { useActionToast } from "@/components/hooks/useActionToast";
 import { DIAS_SEMANA } from "@/lib/constants";
+import { SEMANAS_DO_MES } from "@/lib/occurrences";
 import type { MissaFormState } from "@/app/admin/(dashboard)/missas/actions";
 import type { ModoMissa } from "@/lib/validations";
 
-type Tipo = "RECORRENTE" | "DATA_UNICA";
+type Tipo = "RECORRENTE" | "MENSAL" | "DATA_UNICA";
 
 type MissaFormProps = {
   action: (prevState: MissaFormState, formData: FormData) => Promise<MissaFormState>;
   defaultValues?: {
     diaSemana: number | null;
+    /** 1-4 = 1ª..4ª, 5 = última; preenchido = missa mensal. */
+    semanaDoMes?: number | null;
     /** ISO ou "yyyy-MM-dd"; preenchida = missa de data única. */
     dataUnica?: string | null;
     horario: string;
@@ -26,15 +29,18 @@ type MissaFormProps = {
   submitLabel: string;
 };
 
+const MODOS_POR_PREFERENCIA: { valor: ModoMissa; titulo: string; descricao: string }[] = [
+  { valor: "NORMAL", titulo: "Normal", descricao: "Sorteio entre quem marcou esta missa como preferida." },
+  {
+    valor: "LISTA_TODOS",
+    titulo: "Todos os coroinhas",
+    descricao: "Sem funções: todo ativo entra numa lista de presença.",
+  },
+];
+
 const MODOS: Record<Tipo, { valor: ModoMissa; titulo: string; descricao: string }[]> = {
-  RECORRENTE: [
-    { valor: "NORMAL", titulo: "Normal", descricao: "Sorteio entre quem marcou esta missa como preferida." },
-    {
-      valor: "LISTA_TODOS",
-      titulo: "Todos os coroinhas",
-      descricao: "Sem funções: todo ativo entra numa lista de presença.",
-    },
-  ],
+  RECORRENTE: MODOS_POR_PREFERENCIA,
+  MENSAL: MODOS_POR_PREFERENCIA,
   DATA_UNICA: [
     {
       valor: "TODOS_ATIVOS",
@@ -68,7 +74,9 @@ function modoInicial(tipo: Tipo, valores: MissaFormProps["defaultValues"]): Modo
 export function MissaForm({ action, defaultValues, tipoInicial, submitLabel }: MissaFormProps) {
   const [state, formAction, pending] = useActionState(action, {});
   useActionToast(state, pending, "Missa salva.");
-  const [tipo, setTipo] = useState<Tipo>(defaultValues?.dataUnica ? "DATA_UNICA" : (tipoInicial ?? "RECORRENTE"));
+  const [tipo, setTipo] = useState<Tipo>(
+    defaultValues?.dataUnica ? "DATA_UNICA" : defaultValues?.semanaDoMes ? "MENSAL" : (tipoInicial ?? "RECORRENTE")
+  );
   const [modo, setModo] = useState<ModoMissa>(() => modoInicial(tipo, defaultValues));
 
   function trocarTipo(novo: Tipo) {
@@ -81,7 +89,7 @@ export function MissaForm({ action, defaultValues, tipoInicial, submitLabel }: M
     <form action={formAction} className="max-w-md space-y-5">
       <div>
         <Label>Tipo de missa</Label>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <label className={cartaoClasses}>
             <input
               type="radio"
@@ -98,6 +106,18 @@ export function MissaForm({ action, defaultValues, tipoInicial, submitLabel }: M
             <input
               type="radio"
               name="tipo"
+              value="MENSAL"
+              checked={tipo === "MENSAL"}
+              onChange={() => trocarTipo("MENSAL")}
+              className="sr-only"
+            />
+            <span className="font-medium text-fg">Mensal</span>
+            <span className="text-xs text-muted">Uma vez por mês (ex: 1ª sexta-feira).</span>
+          </label>
+          <label className={cartaoClasses}>
+            <input
+              type="radio"
+              name="tipo"
               value="DATA_UNICA"
               checked={tipo === "DATA_UNICA"}
               onChange={() => trocarTipo("DATA_UNICA")}
@@ -109,7 +129,30 @@ export function MissaForm({ action, defaultValues, tipoInicial, submitLabel }: M
         </div>
       </div>
 
-      {tipo === "RECORRENTE" ? (
+      {tipo === "MENSAL" ? (
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <Label htmlFor="semanaDoMes">Qual no mês</Label>
+            <Select id="semanaDoMes" name="semanaDoMes" defaultValue={defaultValues?.semanaDoMes ?? 1}>
+              {SEMANAS_DO_MES.map((rotulo, index) => (
+                <option key={rotulo} value={index + 1}>
+                  {rotulo}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div>
+            <Label htmlFor="diaSemana">Dia da semana</Label>
+            <Select id="diaSemana" name="diaSemana" defaultValue={defaultValues?.diaSemana ?? 5}>
+              {DIAS_SEMANA.map((dia, index) => (
+                <option key={dia} value={index}>
+                  {dia}
+                </option>
+              ))}
+            </Select>
+          </div>
+        </div>
+      ) : tipo === "RECORRENTE" ? (
         <div>
           <Label htmlFor="diaSemana">Dia da semana</Label>
           <Select id="diaSemana" name="diaSemana" defaultValue={defaultValues?.diaSemana ?? 0}>
