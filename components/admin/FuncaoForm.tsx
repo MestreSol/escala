@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import { Button } from "@/components/ui/Button";
+import { SubmitButton } from "@/components/ui/SubmitButton";
 import { Input, Label, Select, FieldError } from "@/components/ui/Field";
 import { PRIORIDADE_LABEL, GRAU_LABEL } from "@/lib/constants";
 import type { FuncaoFormState } from "@/app/admin/(dashboard)/funcoes/actions";
@@ -46,7 +46,7 @@ export function FuncaoForm({ action, defaultValues, submitLabel }: FuncaoFormPro
             </option>
           ))}
         </Select>
-        <p className="mt-1 text-xs text-gray-500">
+        <p className="mt-1 text-xs text-muted">
           Grau mínimo para exercer essa função. Quem tem um grau maior também pode (ex: Cerimoniário
           pode fazer funções de Coroinha ou Acólito).
         </p>
@@ -62,31 +62,31 @@ export function FuncaoForm({ action, defaultValues, submitLabel }: FuncaoFormPro
           defaultValue={defaultValues?.quantidadePadrao ?? 1}
           required
         />
-        <p className="mt-1 text-xs text-gray-500">
+        <p className="mt-1 text-xs text-muted">
           Quantas pessoas essa função costuma precisar por missa (ex: 2 para Ceroferário). Usado
           como sugestão ao configurar cada missa — cada uma pode ajustar individualmente.
         </p>
       </div>
       <div>
-        <label className="flex items-center gap-2 text-sm text-gray-800">
+        <label className="flex items-center gap-2 text-sm text-fg">
           <input
             type="checkbox"
             name="exigeGrupoCompleto"
             defaultChecked={defaultValues?.exigeGrupoCompleto ?? false}
-            className="h-4 w-4 rounded border-gray-300"
+            className="h-4 w-4 rounded border-line-strong"
           />
           Vagas indivisíveis (tudo ou nada)
         </label>
-        <p className="mt-1 text-xs text-gray-500">
+        <p className="mt-1 text-xs text-muted">
           Se marcado, as vagas dessa função só são preenchidas se houver gente para todas ao mesmo
           tempo; senão, todas ficam em aberto (ex: Ceroferário sempre anda em dupla — não faz
           sentido escalar só 1 dos 2).
         </p>
       </div>
       <FieldError>{state.error}</FieldError>
-      <Button type="submit" disabled={pending}>
-        {pending ? "Salvando..." : submitLabel}
-      </Button>
+      <SubmitButton pending={pending} pendingLabel="Salvando">
+        {submitLabel}
+      </SubmitButton>
     </form>
   );
 }

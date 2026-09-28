@@ -1,9 +1,9 @@
 "use client";
 
 import { useActionState } from "react";
-import { Button } from "@/components/ui/Button";
+import { SubmitButton } from "@/components/ui/SubmitButton";
 import { Input, Label, Select, FieldError } from "@/components/ui/Field";
-import { DIAS_SEMANA } from "@/lib/constants";
+import { formatarDiaMissa } from "@/lib/occurrences";
 import type { MissaOption, ServidorFormState } from "@/lib/types";
 
 type ServidorFormProps = {
@@ -36,7 +36,7 @@ export function ServidorForm({ action, missas, defaultValues, submitLabel }: Ser
   return (
     <form
       action={formAction}
-      className="max-w-lg space-y-8 rounded-xl border border-gray-200 bg-white p-6 shadow-sm sm:p-8"
+      className="space-y-8 rounded-2xl border border-line bg-surface p-6 sm:p-8"
     >
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
         <div>
@@ -82,18 +82,18 @@ export function ServidorForm({ action, missas, defaultValues, submitLabel }: Ser
           {GRAUS.map((grau) => (
             <label
               key={grau.value}
-              className="relative flex cursor-pointer flex-col gap-1 rounded-lg border border-gray-200 bg-white p-3 text-sm transition-colors hover:border-blue-300 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:ring-1 has-[:checked]:ring-blue-600"
+              className="relative flex cursor-pointer flex-col gap-1 rounded-xl border border-line bg-surface p-3 text-sm transition-colors hover:border-accent/50 has-[:checked]:border-accent has-[:checked]:bg-accent-soft has-[:checked]:ring-1 has-[:checked]:ring-accent/40"
             >
               <input
                 type="radio"
                 name="categoria"
                 value={grau.value}
                 defaultChecked={(defaultValues?.categoria ?? "COROINHA") === grau.value}
-                className="absolute right-3 top-3 h-4 w-4 border-gray-300 text-blue-600 focus:ring-blue-600"
+                className="absolute right-3 top-3 h-4 w-4 border-line-strong text-accent focus:ring-accent/40"
                 required
               />
-              <span className="pr-6 font-medium text-gray-900">{grau.label}</span>
-              <span className="text-xs text-gray-500">{grau.descricao}</span>
+              <span className="pr-6 font-medium text-fg">{grau.label}</span>
+              <span className="text-xs text-muted">{grau.descricao}</span>
             </label>
           ))}
         </div>
@@ -102,26 +102,26 @@ export function ServidorForm({ action, missas, defaultValues, submitLabel }: Ser
       <div>
         <Label>Missas que prefiro servir</Label>
         {missas.length === 0 ? (
-          <p className="text-sm text-gray-500">Nenhuma missa cadastrada no momento.</p>
+          <p className="text-sm text-muted">Nenhuma missa cadastrada no momento.</p>
         ) : (
           <div className="space-y-2">
             {missas.map((missa) => (
               <label
                 key={missa.id}
-                className="flex cursor-pointer items-center gap-3 rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm text-gray-800 transition-colors hover:border-blue-300 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50"
+                className="flex cursor-pointer items-center gap-3 rounded-xl border border-line bg-surface px-4 py-3 text-sm text-fg transition-colors hover:border-accent/50 has-[:checked]:border-accent has-[:checked]:bg-accent-soft"
               >
                 <input
                   type="checkbox"
                   name="missaIds"
                   value={missa.id}
                   defaultChecked={missaIdsSelecionadas.has(missa.id)}
-                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-600"
+                  className="h-4 w-4 rounded border-line-strong text-accent focus:ring-accent/40"
                 />
                 <span>
-                  <span className="font-medium text-gray-900">
-                    {DIAS_SEMANA[missa.diaSemana]} às {missa.horario}
+                  <span className="font-medium text-fg">
+                    {formatarDiaMissa(missa)} às {missa.horario}
                   </span>
-                  <span className="text-gray-500"> — {missa.comunidade}</span>
+                  <span className="text-muted"> — {missa.comunidade}</span>
                 </span>
               </label>
             ))}
@@ -130,9 +130,9 @@ export function ServidorForm({ action, missas, defaultValues, submitLabel }: Ser
       </div>
 
       <FieldError>{state.error}</FieldError>
-      <Button type="submit" disabled={pending} className="w-full">
-        {pending ? "Enviando..." : submitLabel}
-      </Button>
+      <SubmitButton pending={pending} pendingLabel="Enviando" className="w-full">
+        {submitLabel}
+      </SubmitButton>
     </form>
   );
 }

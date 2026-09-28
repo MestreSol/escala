@@ -24,6 +24,12 @@ export type ServidorCandidato = {
    * quando não sobra ninguém com frequência normal para a vaga.
    */
   frequenciaBaixa?: boolean;
+  /**
+   * Dias (diaChave) em que o próprio servidor avisou que não pode servir
+   * (ver lib/servidorIndisponibilidade.ts) — diferente de frequenciaBaixa,
+   * isso EXCLUI o servidor de qualquer vaga nesse dia, sem exceção.
+   */
+  diasIndisponiveis?: Set<string>;
 };
 
 export type AtribuicaoGerada = {
@@ -55,15 +61,14 @@ export type GerarEscalaOptions = {
    * geração incremental anterior. Usado para não escalar a mesma pessoa
    * duas vezes na mesma ocorrência, para permitir acúmulo de função mesmo
    * quando a função "base" foi preenchida numa rodada anterior, e para
-   * respeitar a regra de "não repetir no mesmo dia" (ver `data`/`prioridade`
-   * abaixo) mesmo quando a atribuição anterior não faz parte deste lote.
+   * respeitar a regra de "não repetir no mesmo dia" (ver `data` abaixo)
+   * mesmo quando a atribuição anterior não faz parte deste lote.
    */
   atribuicoesExistentes?: Array<{
     ocorrenciaId: string;
     funcaoId: string;
     servidorId: string | null;
     data: Date;
-    prioridade: Prioridade;
   }>;
   /**
    * Mapa servidorId -> lista de servidorId vinculados (ex: irmãos). Quem tem
@@ -184,11 +189,9 @@ function montarUnidades(slots: SlotParaPreencher[], funcoesAtomicas: Set<string>
  * (equilíbrio) e sorteia entre os empatados; ninguém é escalado duas vezes
  * na mesma ocorrência exceto via acumulação explícita (ver `acumulacoes`).
  *
- * Ninguém é escalado em duas ocorrências diferentes no mesmo dia, a menos
- * que a função já atribuída a essa pessoa naquele dia seja de prioridade
- * BAIXA — nesse caso ela continua elegível para outras missas do dia (ex:
- * quem faz Sineta de manhã ainda pode ser escalado à noite; quem faz
- * Cerimoniário de manhã, não).
+ * Ninguém é escalado em duas ocorrências diferentes no mesmo dia, qualquer
+ * que seja a prioridade da função (ex: quem faz Sineta de manhã não volta à
+ * noite). A única repetição permitida é o acúmulo dentro da mesma ocorrência.
  *
  * Funções marcadas em `funcoesAtomicas` são preenchidas em bloco: só são
  * atribuídas se houver gente distinta para TODAS as suas vagas na mesma
@@ -196,7 +199,7 @@ function montarUnidades(slots: SlotParaPreencher[], funcoesAtomicas: Set<string>
  *
  * Servidores vinculados (ver `vinculos`, ex: irmãos) só são escalados numa
  * ocorrência se TODOS os vinculados também puderem servir ali (preferem
- * aquela missa, ninguém do grupo já tem função ALTA/MEDIA nesse dia, e há
+ * aquela missa, ninguém do grupo já está escalado em outra missa do dia, e há
  * vaga não-atômica distinta e elegível para cada um); senão, nenhum do grupo
  * é escalado naquela ocorrência.
  *
@@ -209,6 +212,11 @@ function montarUnidades(slots: SlotParaPreencher[], funcoesAtomicas: Set<string>
  * calculado a partir das presenças registradas — ver lib/frequencia.ts) cai
  * de prioridade: só é escolhido quando não sobra mais ninguém com frequência
  * normal disputando a mesma vaga.
+ *
+ * Dias que o próprio servidor avisou como indisponível (`diasIndisponiveis`,
+ * ver lib/servidorIndisponibilidade.ts — tela pública onde ele marca isso)
+ * excluem o servidor de qualquer vaga naquele dia, sem exceção — diferente
+ * de frequenciaBaixa, aqui não há "último recurso".
  */
 export function gerarEscala(
   slotsInput: SlotParaPreencher[],
@@ -225,17 +233,16 @@ export function gerarEscala(
   const ultimaFuncao = new Map<string, string>();
 
   const existentesPorOcorrencia = new Map<string, Array<{ funcaoId: string; servidorId: string }>>();
-  // servidorId -> dias em que já está escalado numa função de prioridade
-  // ALTA/MEDIA. Quem só tem função BAIXA no dia continua livre para outras
-  // missas do mesmo dia (ver diaChave/regra abaixo).
-  const usadosNoDiaAlta = new Map<string, Set<string>>();
+  // diaChave -> servidores já escalados em alguma missa desse dia (qualquer
+  // função, qualquer prioridade). Quem está aqui não entra em outra missa do
+  // mesmo dia.
+  const usadosNoDia = new Map<string, Set<string>>();
 
-  function marcarUsoNoDia(servidorId: string, data: Date, prioridade: Prioridade) {
-    if (prioridade === "BAIXA") return;
+  function marcarUsoNoDia(servidorId: string, data: Date) {
     const chave = diaChave(data);
-    const lista = usadosNoDiaAlta.get(chave);
+    const lista = usadosNoDia.get(chave);
     if (lista) lista.add(servidorId);
-    else usadosNoDiaAlta.set(chave, new Set([servidorId]));
+    else usadosNoDia.set(chave, new Set([servidorId]));
   }
 
   for (const a of options.atribuicoesExistentes ?? []) {
@@ -244,7 +251,7 @@ export function gerarEscala(
     const entrada = { funcaoId: a.funcaoId, servidorId: a.servidorId };
     if (lista) lista.push(entrada);
     else existentesPorOcorrencia.set(a.ocorrenciaId, [entrada]);
-    marcarUsoNoDia(a.servidorId, a.data, a.prioridade);
+    marcarUsoNoDia(a.servidorId, a.data);
   }
 
   const grupos = agruparPorOcorrencia(slotsInput);
@@ -304,11 +311,16 @@ export function gerarEscala(
         }
 
         // Mesma regra de "não escalar duas vezes no mesmo dia" do resto do
-        // gerador: se algum vinculado já tem função ALTA/MEDIA nesse dia
-        // (de uma ocorrência anterior), o par inteiro fica de fora daqui —
+        // gerador: se algum vinculado já está escalado nesse dia (numa
+        // ocorrência anterior), o par inteiro fica de fora daqui —
         // sem isso, o pré-passo de vínculo ignorava esse limite e escalava
         // os dois de novo à noite mesmo já tendo servido de manhã.
-        if (membros.some((m) => usadosNoDiaAlta.get(diaOcorrencia)?.has(m.id))) {
+        if (membros.some((m) => usadosNoDia.get(diaOcorrencia)?.has(m.id))) {
+          for (const m of membros) usadosNaOcorrencia.add(m.id);
+          continue;
+        }
+
+        if (membros.some((m) => m.diasIndisponiveis?.has(diaOcorrencia))) {
           for (const m of membros) usadosNaOcorrencia.add(m.id);
           continue;
         }
@@ -353,7 +365,7 @@ export function gerarEscala(
           ultimaFuncao.set(servidorId, slot.funcaoId);
           usadosNaOcorrencia.add(servidorId);
           assignadoPorFuncao.set(slot.funcaoId, servidorId);
-          marcarUsoNoDia(servidorId, slot.data, slot.prioridade);
+          marcarUsoNoDia(servidorId, slot.data);
 
           const unidadeDoSlot = unidades.find((u) => u.slots.includes(slot));
           if (unidadeDoSlot) {
@@ -377,7 +389,8 @@ export function gerarEscala(
               s.missaIdsPreferidas.has(slot.missaId) &&
               grauCompativel(s, slot.grauMinimo) &&
               !usadosNaOcorrencia.has(s.id) &&
-              !usadosNoDiaAlta.get(diaChave(slot.data))?.has(s.id)
+              !usadosNoDia.get(diaChave(slot.data))?.has(s.id) &&
+              !s.diasIndisponiveis?.has(diaChave(slot.data))
           );
 
           if (candidatos.length === 0) {
@@ -397,7 +410,7 @@ export function gerarEscala(
           ultimaFuncao.set(vencedor.id, slot.funcaoId);
           usadosNaOcorrencia.add(vencedor.id);
           assignadoPorFuncao.set(slot.funcaoId, vencedor.id);
-          marcarUsoNoDia(vencedor.id, slot.data, slot.prioridade);
+          marcarUsoNoDia(vencedor.id, slot.data);
         }
         continue;
       }
@@ -409,7 +422,8 @@ export function gerarEscala(
           s.missaIdsPreferidas.has(missaId) &&
           grauCompativel(s, unidade.grauMinimo) &&
           !usadosNaOcorrencia.has(s.id) &&
-          !usadosNoDiaAlta.get(diaChave(diaUnidade))?.has(s.id)
+          !usadosNoDia.get(diaChave(diaUnidade))?.has(s.id) &&
+          !s.diasIndisponiveis?.has(diaChave(diaUnidade))
       );
 
       if (candidatosBase.length < unidade.slots.length) {
@@ -438,7 +452,7 @@ export function gerarEscala(
         ultimaFuncao.set(vencedor.id, slot.funcaoId);
         usadosNaOcorrencia.add(vencedor.id);
         assignadoPorFuncao.set(slot.funcaoId, vencedor.id);
-        marcarUsoNoDia(vencedor.id, slot.data, slot.prioridade);
+        marcarUsoNoDia(vencedor.id, slot.data);
 
         const indice = poolDisponivel.findIndex((c) => c.id === vencedor.id);
         poolDisponivel.splice(indice, 1);
@@ -469,7 +483,7 @@ export function gerarEscala(
       if (acumuladorId) {
         contagemTotal.set(acumuladorId, (contagemTotal.get(acumuladorId) ?? 0) + 1);
         ultimaFuncao.set(acumuladorId, slot.funcaoId);
-        marcarUsoNoDia(acumuladorId, slot.data, slot.prioridade);
+        marcarUsoNoDia(acumuladorId, slot.data);
       }
     }
   }

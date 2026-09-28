@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { ServidorForm } from "@/components/ServidorForm";
-import { Button } from "@/components/ui/Button";
+import { SubmitButton } from "@/components/ui/SubmitButton";
 import { getVinculosDoServidor } from "@/lib/servidorVinculo";
 import type { MissaOption, ServidorMissaPreferenciaRow, ServidorRow } from "@/lib/types";
 import { updateServidor, saveServidorVinculos } from "../actions";
@@ -23,6 +23,7 @@ export default async function EditarServidorPage({ params }: { params: Promise<{
       .from("Missa")
       .select("*")
       .eq("ativo", true)
+      .eq("escalarTodosAtivos", false)
       .order("diaSemana", { ascending: true })
       .order("horario", { ascending: true })
       .returns<MissaOption[]>(),
@@ -52,7 +53,7 @@ export default async function EditarServidorPage({ params }: { params: Promise<{
   return (
     <div className="max-w-lg space-y-10">
       <div>
-        <h1 className="mb-6 text-2xl font-semibold text-gray-900">Editar servidor</h1>
+        <h1 className="mb-6 text-2xl font-semibold tracking-tight text-fg">Editar servidor</h1>
         <ServidorForm
           action={updateServidor.bind(null, servidor.id)}
           missas={missas}
@@ -65,34 +66,34 @@ export default async function EditarServidorPage({ params }: { params: Promise<{
       </div>
 
       <div>
-        <h2 className="mb-1 text-lg font-semibold text-gray-900">Vínculo entre servidores</h2>
-        <p className="mb-4 text-sm text-gray-500">
+        <h2 className="mb-1 text-lg font-semibold text-fg">Vínculo entre servidores</h2>
+        <p className="mb-4 text-sm text-muted">
           Marque quem <strong>{servidor.nome}</strong> só serve junto (ex: irmãos). Na escala,
           esses servidores só são escalados numa missa se todos os vinculados também puderem
           servir nela — senão, nenhum deles entra naquela missa.
         </p>
 
         {outrosServidores.length === 0 ? (
-          <p className="text-sm text-gray-500">Cadastre outros servidores para configurar vínculos.</p>
+          <p className="text-sm text-muted">Cadastre outros servidores para configurar vínculos.</p>
         ) : (
-          <form action={salvarVinculos} className="space-y-3 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+          <form action={salvarVinculos} className="space-y-3 rounded-xl border border-line bg-surface p-6 ">
             <div className="max-h-72 space-y-2 overflow-y-auto">
               {outrosServidores.map((outro) => (
                 <label
                   key={outro.id}
-                  className="flex items-center gap-3 rounded-md border border-gray-200 bg-white px-4 py-3"
+                  className="flex items-center gap-3 rounded-md border border-line bg-surface px-4 py-3"
                 >
                   <input
                     type="checkbox"
                     name={`vinculo_${outro.id}`}
                     defaultChecked={vinculadosIds.has(outro.id)}
-                    className="h-4 w-4 rounded border-gray-300"
+                    className="h-4 w-4 rounded border-line-strong"
                   />
-                  <span className="text-sm font-medium text-gray-900">{outro.nome}</span>
+                  <span className="text-sm font-medium text-fg">{outro.nome}</span>
                 </label>
               ))}
             </div>
-            <Button type="submit">Salvar vínculos</Button>
+            <SubmitButton pendingLabel="Salvando">Salvar vínculos</SubmitButton>
           </form>
         )}
       </div>

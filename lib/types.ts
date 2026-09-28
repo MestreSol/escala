@@ -14,7 +14,8 @@ export type UsuarioRow = {
 
 export type MissaOption = {
   id: string;
-  diaSemana: number;
+  diaSemana: number | null;
+  dataUnica: string | null;
   horario: string;
   comunidade: string;
 };
@@ -36,9 +37,11 @@ export type FuncaoRow = {
 
 export type MissaRow = {
   id: string;
-  diaSemana: number;
+  diaSemana: number | null;
+  dataUnica: string | null;
   horario: string;
   comunidade: string;
+  escalarTodosAtivos: boolean;
   ativo: boolean;
   createdAt: string;
   updatedAt: string;
@@ -82,11 +85,19 @@ export type ServidorVinculoRow = {
   servidorBId: string;
 };
 
+export type ServidorIndisponibilidadeRow = {
+  id: string;
+  servidorId: string;
+  data: string;
+  createdAt: string;
+};
+
 export type EscalaAtribuicaoRow = {
   id: string;
   escalaId: string | null;
   ocorrenciaId: string;
-  funcaoId: string;
+  /** Nulo na lista de presença simples de missas `escalarTodosAtivos` (sem função individual). */
+  funcaoId: string | null;
   slotIndex: number;
   servidorId: string | null;
   servidorNomeSnapshot: string | null;

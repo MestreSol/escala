@@ -7,18 +7,18 @@ type BadgeProps = {
 };
 
 const COLOR_CLASSES: Record<NonNullable<BadgeProps["color"]>, string> = {
-  gray: "bg-gray-100 text-gray-700",
-  green: "bg-green-100 text-green-800",
-  red: "bg-red-100 text-red-800",
-  yellow: "bg-yellow-100 text-yellow-800",
-  blue: "bg-blue-100 text-blue-800",
+  gray: "bg-surface-2 text-muted ring-line",
+  green: "bg-ok-soft text-ok ring-ok/20",
+  red: "bg-danger-soft text-danger ring-danger/20",
+  yellow: "bg-warn-soft text-warn ring-warn/20",
+  blue: "bg-accent-soft text-accent ring-accent/20",
 };
 
 export function Badge({ children, color = "gray" }: BadgeProps) {
   return (
     <span
       className={clsx(
-        "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium",
+        "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium tracking-wide ring-1 ring-inset",
         COLOR_CLASSES[color]
       )}
     >

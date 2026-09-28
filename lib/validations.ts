@@ -8,11 +8,23 @@ export const funcaoSchema = z.object({
   exigeGrupoCompleto: z.coerce.boolean().default(false),
 });
 
-export const missaSchema = z.object({
-  diaSemana: z.coerce.number().int().min(0).max(6),
-  horario: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Horário inválido (HH:mm)"),
-  comunidade: z.string().trim().min(2, "Informe a comunidade"),
-});
+export const missaSchema = z
+  .object({
+    tipoRecorrencia: z.enum(["semanal", "unica"]),
+    diaSemana: z.coerce.number().int().min(0).max(6).optional(),
+    dataUnica: z.string().optional(),
+    horario: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Horário inválido (HH:mm)"),
+    comunidade: z.string().trim().min(2, "Informe a comunidade"),
+    escalarTodosAtivos: z.coerce.boolean().default(false),
+  })
+  .superRefine((data, ctx) => {
+    if (data.tipoRecorrencia === "semanal" && data.diaSemana === undefined) {
+      ctx.addIssue({ code: "custom", message: "Selecione o dia da semana", path: ["diaSemana"] });
+    }
+    if (data.tipoRecorrencia === "unica" && !data.dataUnica) {
+      ctx.addIssue({ code: "custom", message: "Informe a data do evento", path: ["dataUnica"] });
+    }
+  });
 
 export const missaFuncaoRequisitoSchema = z.object({
   funcaoId: z.string().min(1),

@@ -11,11 +11,25 @@ import {
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { supabase } from "@/lib/supabase";
-import { Button } from "@/components/ui/Button";
-import { DeleteButton } from "@/components/admin/DeleteButton";
+import clsx from "clsx";
+import { buttonClasses } from "@/components/ui/Button";
+import { AcaoEscalaForm } from "@/components/admin/AcaoEscalaForm";
 import { periodoDoMes, paraExibicao, lerDataArmazenada } from "@/lib/occurrences";
 import type { EscalaAtribuicaoRow, MissaFuncaoRequisitoRow, MissaRow, MissaOcorrenciaRow } from "@/lib/types";
-import { materializarOcorrencias, gerarEscalaPeriodo, regenerarEscalaPeriodo, apagarEscalaPeriodo } from "./actions";
+import { SubmitButton } from "@/components/ui/SubmitButton";
+import { mesEstaPublicado } from "@/lib/escalaPublicada";
+import {
+  materializarOcorrencias,
+  gerarEscalaPeriodo,
+  regenerarEscalaPeriodo,
+  apagarEscalaPeriodo,
+  publicarEscalaMes,
+  despublicarEscalaMes,
+} from "./actions";
+
+const COR_SEM_ESCALA = "bg-surface-2 text-muted ring-line";
+const COR_EM_ABERTO = "bg-danger-soft text-danger ring-danger/20";
+const COR_COMPLETA = "bg-ok-soft text-ok ring-ok/20";
 
 // Página lê e materializa dados do banco a cada acesso — nunca deve ser congelada em build.
 export const dynamic = "force-dynamic";
@@ -71,98 +85,177 @@ export default async function CalendarioPage({
   const periodoInicioISO = periodoInicio.toISOString();
   const periodoFimISO = periodoFim.toISOString();
 
+  const hoje = new Date();
+  const publicado = await mesEstaPublicado(mesAtualParam);
+
   return (
     <div>
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+      <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold capitalize text-gray-900">{mesAtualLabel}</h1>
-          <div className="mt-1 flex gap-3 text-sm">
-            <Link href={`/admin/calendario?mes=${mesAnterior}`} className="text-blue-700 hover:text-blue-900">
-              ← Mês anterior
-            </Link>
-            <Link href={`/admin/calendario?mes=${proximoMes}`} className="text-blue-700 hover:text-blue-900">
-              Próximo mês →
-            </Link>
-          </div>
-        </div>
-        <div className="flex gap-3">
-          <form action={gerarEscalaPeriodo.bind(null, periodoInicioISO, periodoFimISO)}>
-            <Button type="submit">Gerar escala</Button>
-          </form>
-          <Link href={`/admin/calendario/confirmar?mes=${mesAtualParam}`}>
-            <Button variant="secondary">Confirmar escala do mês</Button>
-          </Link>
-          <DeleteButton
-            action={regenerarEscalaPeriodo.bind(null, periodoInicioISO, periodoFimISO)}
-            confirmMessage="Isso apaga todas as atribuições geradas automaticamente neste mês e sorteia tudo de novo. Continuar?"
-            label="Regenerar tudo"
-          />
-          <DeleteButton
-            action={apagarEscalaPeriodo.bind(null, periodoInicioISO, periodoFimISO)}
-            confirmMessage="Isso apaga TODAS as atribuições deste mês, incluindo as editadas manualmente, sem gerar outras no lugar. Use quando 'Gerar escala' não estiver preenchendo mais nada. Continuar?"
-            label="Apagar escala do mês"
-          />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-7 gap-px overflow-hidden rounded-lg border border-gray-200 bg-gray-200 text-xs">
-        {["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"].map((dia) => (
-          <div key={dia} className="bg-gray-50 px-2 py-2 text-center font-medium text-gray-500">
-            {dia}
-          </div>
-        ))}
-
-        {dias.map((dia) => {
-          const ocorrenciasDoDia = ocorrencias.filter((o) => isSameDay(o.dataExibicao, dia));
-          const foraDoMes = !isSameMonth(dia, mesReferencia);
-
-          return (
-            <div
-              key={dia.toISOString()}
-              className={`min-h-[110px] bg-white p-2 ${foraDoMes ? "bg-gray-50 text-gray-400" : ""}`}
+          <p className="mb-1 text-[11px] font-medium uppercase tracking-wider text-subtle">Calendário</p>
+          <h1 className="text-2xl font-semibold capitalize tracking-tight text-fg">{mesAtualLabel}</h1>
+          <div className="mt-2 flex gap-1 text-sm">
+            <Link
+              href={`/admin/calendario?mes=${mesAnterior}`}
+              className="rounded-md px-2 py-1 text-muted transition-colors hover:bg-surface hover:text-fg"
             >
-              <p className="mb-1 text-right text-xs">{format(dia, "d")}</p>
-              <div className="space-y-1">
-                {ocorrenciasDoDia.map((ocorrencia) => {
-                  const total = totalSlotsPorMissa.get(ocorrencia.missaId) ?? 0;
-                  const preenchidas = ocorrencia.atribuicoes.filter((a) => a.servidorId).length;
-                  const geradas = ocorrencia.atribuicoes.length;
-
-                  let cor = "bg-gray-100 text-gray-600";
-                  if (geradas > 0) {
-                    cor =
-                      preenchidas >= total && total > 0
-                        ? "bg-green-100 text-green-800"
-                        : "bg-red-100 text-red-800";
-                  }
-
-                  return (
-                    <Link
-                      key={ocorrencia.id}
-                      href={`/admin/calendario/${ocorrencia.id}`}
-                      className={`block truncate rounded px-1.5 py-1 text-[11px] font-medium ${cor}`}
-                      title={`${ocorrencia.missa.comunidade} — ${format(ocorrencia.dataExibicao, "HH:mm")}`}
-                    >
-                      {format(ocorrencia.dataExibicao, "HH:mm")} {ocorrencia.missa.comunidade}
-                      {total > 0 ? ` (${preenchidas}/${total})` : ""}
-                    </Link>
-                  );
-                })}
-              </div>
-            </div>
-          );
-        })}
+              ← Anterior
+            </Link>
+            <Link
+              href={`/admin/calendario?mes=${proximoMes}`}
+              className="rounded-md px-2 py-1 text-muted transition-colors hover:bg-surface hover:text-fg"
+            >
+              Próximo →
+            </Link>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <AcaoEscalaForm
+            action={gerarEscalaPeriodo.bind(null, periodoInicioISO, periodoFimISO)}
+            pendingTitle="Gerando escala"
+          >
+            Gerar escala
+          </AcaoEscalaForm>
+          <Link href={`/admin/calendario/confirmar?mes=${mesAtualParam}`} className={buttonClasses("secondary")}>
+            Confirmar escala do mês
+          </Link>
+          <AcaoEscalaForm
+            action={regenerarEscalaPeriodo.bind(null, periodoInicioISO, periodoFimISO)}
+            variant="ghost"
+            pendingTitle="Regenerando escala"
+            confirmMessage="Isso apaga todas as atribuições geradas automaticamente neste mês e sorteia tudo de novo. Continuar?"
+          >
+            Regenerar tudo
+          </AcaoEscalaForm>
+          <AcaoEscalaForm
+            action={apagarEscalaPeriodo.bind(null, periodoInicioISO, periodoFimISO)}
+            variant="danger"
+            pendingTitle="Apagando escala do mês"
+            mensagens={["Removendo atribuições", "Liberando as vagas"]}
+            confirmMessage="Isso apaga TODAS as atribuições deste mês, incluindo as editadas manualmente, sem gerar outras no lugar. Use quando 'Gerar escala' não estiver preenchendo mais nada. Continuar?"
+          >
+            Apagar escala
+          </AcaoEscalaForm>
+        </div>
       </div>
 
-      <div className="mt-4 flex gap-4 text-xs text-gray-500">
-        <span className="flex items-center gap-1">
-          <span className="h-3 w-3 rounded bg-gray-100" /> Sem escala gerada
+      <div
+        className={clsx(
+          "mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm",
+          publicado ? "border-ok/25 bg-ok-soft" : "border-line bg-surface"
+        )}
+      >
+        <div className="flex items-center gap-2.5">
+          <span
+            aria-hidden
+            className={clsx("size-2 rounded-full", publicado ? "animate-pulse-soft bg-ok" : "bg-subtle")}
+          />
+          {publicado ? (
+            <span className="text-fg">
+              Publicada para os servidores em{" "}
+              <Link href={`/escala?mes=${mesAtualParam}`} target="_blank" className="text-accent hover:text-accent-hover">
+                /escala ↗
+              </Link>
+            </span>
+          ) : (
+            <span className="text-muted">Rascunho — os servidores ainda não veem a escala deste mês.</span>
+          )}
+        </div>
+        <form action={(publicado ? despublicarEscalaMes : publicarEscalaMes).bind(null, mesAtualParam)}>
+          <SubmitButton
+            variant={publicado ? "ghost" : "primary"}
+            pendingLabel={publicado ? "Despublicando" : "Publicando"}
+          >
+            {publicado ? "Despublicar" : "Publicar para os servidores"}
+          </SubmitButton>
+        </form>
+      </div>
+
+      <div className="overflow-x-auto">
+        <div className="grid min-w-[640px] grid-cols-7 gap-px overflow-hidden rounded-xl border border-line bg-line text-xs">
+          {["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"].map((dia) => (
+            <div
+              key={dia}
+              className="bg-bg px-2 py-2.5 text-center text-[11px] font-medium uppercase tracking-wider text-subtle"
+            >
+              {dia}
+            </div>
+          ))}
+
+          {dias.map((dia) => {
+            const ocorrenciasDoDia = ocorrencias.filter((o) => isSameDay(o.dataExibicao, dia));
+            const foraDoMes = !isSameMonth(dia, mesReferencia);
+            const ehHoje = isSameDay(dia, hoje);
+
+            return (
+              <div
+                key={dia.toISOString()}
+                className={clsx("min-h-[110px] p-2", foraDoMes ? "bg-bg text-subtle/60" : "bg-surface text-muted")}
+              >
+                <p className="mb-1.5 flex justify-end">
+                  <span
+                    className={clsx(
+                      "flex size-6 items-center justify-center rounded-full text-xs",
+                      ehHoje && "bg-accent font-semibold text-accent-fg"
+                    )}
+                  >
+                    {format(dia, "d")}
+                  </span>
+                </p>
+                <div className="space-y-1">
+                  {ocorrenciasDoDia.map((ocorrencia) => {
+                    const total = totalSlotsPorMissa.get(ocorrencia.missaId) ?? 0;
+                    const preenchidas = ocorrencia.atribuicoes.filter((a) => a.servidorId).length;
+                    const geradas = ocorrencia.atribuicoes.length;
+
+                    let cor = COR_SEM_ESCALA;
+                    let rotulo = "";
+                    if (ocorrencia.missa.escalarTodosAtivos) {
+                      // Missa "todos os ativos" não tem vagas por função — o
+                      // total de referência é quem já foi escalado, não uma
+                      // meta fixa, então "completa" aqui só significa "já tem
+                      // gente" (ver ListaTodosAtivos na página da ocorrência).
+                      cor = geradas > 0 ? COR_COMPLETA : COR_SEM_ESCALA;
+                      rotulo = geradas > 0 ? ` (${preenchidas} escalados)` : "";
+                    } else {
+                      if (geradas > 0) {
+                        cor = preenchidas >= total && total > 0 ? COR_COMPLETA : COR_EM_ABERTO;
+                      }
+                      rotulo = total > 0 ? ` (${preenchidas}/${total})` : "";
+                    }
+
+                    return (
+                      <Link
+                        key={ocorrencia.id}
+                        href={`/admin/calendario/${ocorrencia.id}`}
+                        className={clsx(
+                          "block truncate rounded-md px-1.5 py-1 text-[11px] font-medium ring-1 ring-inset transition-all hover:-translate-y-px hover:brightness-125",
+                          cor
+                        )}
+                        title={`${ocorrencia.missa.comunidade} — ${format(ocorrencia.dataExibicao, "HH:mm")}`}
+                      >
+                        <span className="tabular-nums">{format(ocorrencia.dataExibicao, "HH:mm")}</span>{" "}
+                        {ocorrencia.missa.comunidade}
+                        <span className="opacity-70">{rotulo}</span>
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-4 text-xs text-muted">
+        <span className="flex items-center gap-1.5">
+          <span className={clsx("size-2.5 rounded-sm ring-1 ring-inset", COR_SEM_ESCALA)} /> Sem escala gerada
         </span>
-        <span className="flex items-center gap-1">
-          <span className="h-3 w-3 rounded bg-red-100" /> Vagas em aberto
+        <span className="flex items-center gap-1.5">
+          <span className={clsx("size-2.5 rounded-sm ring-1 ring-inset", COR_EM_ABERTO)} /> Vagas em aberto
         </span>
-        <span className="flex items-center gap-1">
-          <span className="h-3 w-3 rounded bg-green-100" /> Completa
+        <span className="flex items-center gap-1.5">
+          <span className={clsx("size-2.5 rounded-sm ring-1 ring-inset", COR_COMPLETA)} /> Completa
         </span>
       </div>
     </div>

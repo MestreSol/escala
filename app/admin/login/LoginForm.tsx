@@ -2,7 +2,7 @@
 
 import { useActionState } from "react";
 import { login, LoginState } from "./actions";
-import { Button } from "@/components/ui/Button";
+import { SubmitButton } from "@/components/ui/SubmitButton";
 import { Input, Label, FieldError } from "@/components/ui/Field";
 
 const initialState: LoginState = {};
@@ -22,9 +22,9 @@ export function LoginForm({ redirectTo }: { redirectTo: string }) {
         <Input id="password" name="password" type="password" autoComplete="current-password" required />
       </div>
       <FieldError>{state.error}</FieldError>
-      <Button type="submit" className="w-full" disabled={pending}>
-        {pending ? "Entrando..." : "Entrar"}
-      </Button>
+      <SubmitButton pending={pending} pendingLabel="Entrando" className="w-full">
+        Entrar
+      </SubmitButton>
     </form>
   );
 }

@@ -4,17 +4,21 @@ import { ImageResponse } from "next/og";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { periodoDoMes, paraExibicao } from "@/lib/occurrences";
-import { buscarEscalaDoPeriodo, type LinhaEscala } from "./data";
+import { buscarEscalaDoPeriodo, type LinhaEscala } from "@/lib/escalaDoPeriodo";
 
 export const runtime = "nodejs";
 // Lê dados do banco a cada acesso — nunca deve ser congelada em build.
 export const dynamic = "force-dynamic";
 
 const LARGURA = 900;
-const COR_TEXTO = "#111827";
-const COR_TEXTO_SECUNDARIO = "#6b7280";
-const COR_BORDA = "#e5e7eb";
-const COR_ABERTO = "#dc2626";
+// Mesmas cores do tema escuro do site (ver app/globals.css).
+const COR_FUNDO = "#0b0b0c";
+const COR_CARTAO = "#131316";
+const COR_TEXTO = "#ededee";
+const COR_TEXTO_SECUNDARIO = "#a1a1a8";
+const COR_BORDA = "#26262b";
+const COR_ABERTO = "#f87171";
+const COR_DESTAQUE = "#d4a94a";
 
 async function carregarFontes() {
   const dir = path.join(process.cwd(), "assets", "fonts");
@@ -43,7 +47,7 @@ export async function GET(request: Request) {
 
   const tituloMes = capitalizar(format(paraExibicao(periodoInicio), "MMMM 'de' yyyy", { locale: ptBR }));
 
-  let altura = 140;
+  let altura = 170;
   for (const ocorrencia of ocorrencias) {
     altura += 64;
     const linhas =
@@ -63,15 +67,19 @@ export async function GET(request: Request) {
           minHeight: altura,
           display: "flex",
           flexDirection: "column",
-          backgroundColor: "#ffffff",
+          backgroundColor: COR_FUNDO,
           padding: 48,
           fontFamily: "Roboto",
         }}
       >
         <div style={{ display: "flex", flexDirection: "column", marginBottom: 32 }}>
-          <div style={{ display: "flex", fontSize: 34, fontWeight: 700, color: COR_TEXTO }}>
-            Escala — {tituloMes}
+          <div style={{ display: "flex", alignItems: "center", marginBottom: 10 }}>
+            <div style={{ display: "flex", width: 28, height: 2, backgroundColor: COR_DESTAQUE, marginRight: 12 }} />
+            <div style={{ display: "flex", fontSize: 15, fontWeight: 700, color: COR_DESTAQUE, letterSpacing: 3 }}>
+              ESCALA
+            </div>
           </div>
+          <div style={{ display: "flex", fontSize: 34, fontWeight: 700, color: COR_TEXTO }}>{tituloMes}</div>
           <div style={{ fontSize: 16, color: COR_TEXTO_SECUNDARIO, marginTop: 4 }}>
             {variante === "completa" ? "Funções e servidores" : "Servidores escalados"}
           </div>
@@ -94,19 +102,25 @@ export async function GET(request: Request) {
                   display: "flex",
                   flexDirection: "column",
                   border: `1px solid ${COR_BORDA}`,
-                  borderRadius: 10,
+                  borderRadius: 14,
+                  backgroundColor: COR_CARTAO,
                   padding: 20,
                   marginBottom: 24,
                 }}
               >
                 <div style={{ display: "flex", flexDirection: "row", justifyContent: "space-between", marginBottom: 12 }}>
                   <div style={{ display: "flex", fontSize: 20, fontWeight: 700, color: COR_TEXTO }}>
-                    {cabecalho} — {horario}
+                    {cabecalho}
+                    <span style={{ color: COR_DESTAQUE, marginLeft: 10 }}>{horario}</span>
                   </div>
                   <div style={{ fontSize: 16, color: COR_TEXTO_SECUNDARIO }}>{ocorrencia.comunidade}</div>
                 </div>
 
-                {linhas.length === 0 ? (
+                {ocorrencia.todosAtivos ? (
+                  <div style={{ display: "flex", fontSize: 18, fontWeight: 700, color: COR_DESTAQUE, letterSpacing: 1 }}>
+                    TODOS OS COROINHAS
+                  </div>
+                ) : linhas.length === 0 ? (
                   <div style={{ display: "flex", fontSize: 15, color: COR_TEXTO_SECUNDARIO }}>
                     Nenhuma função configurada.
                   </div>
@@ -124,7 +138,7 @@ export async function GET(request: Request) {
                     >
                       {variante === "completa" ? (
                         <div style={{ display: "flex", fontSize: 16, color: COR_TEXTO_SECUNDARIO }}>
-                          {linha.funcaoNome}
+                          {linha.funcaoNome ?? "Presença confirmada"}
                           {linha.totalSlotsDaFuncao > 1 ? ` #${linha.slotIndex}` : ""}
                         </div>
                       ) : null}

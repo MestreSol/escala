@@ -1,4 +1,5 @@
-import { parse } from "date-fns";
+import { format, parse } from "date-fns";
+import { DIAS_SEMANA } from "@/lib/constants";
 
 const UM_DIA_MS = 24 * 60 * 60 * 1000;
 
@@ -69,6 +70,31 @@ export function paraExibicao(data: Date): Date {
   );
 }
 
+/** Parseia um `<input type="date">` ("yyyy-MM-dd") como data-âncora meia-noite UTC. */
+export function parseDataUnica(valor: string): Date {
+  const [ano, mes, dia] = valor.split("-").map(Number);
+  return new Date(Date.UTC(ano, mes - 1, dia));
+}
+
+/**
+ * Data em que uma missa de data única (`Missa.dataUnica`, eventos sazonais
+ * que não repetem toda semana) ocorre dentro do período — só a própria data,
+ * se ela cair no intervalo; array vazio caso contrário. Mantém a mesma
+ * assinatura de retorno de `gerarDatasOcorrencia` pra ambas alimentarem
+ * `materializarOcorrencias` do mesmo jeito.
+ */
+export function gerarDataOcorrenciaUnica(dataUnica: Date, periodoInicio: Date, periodoFim: Date): Date[] {
+  if (dataUnica < periodoInicio || dataUnica > periodoFim) return [];
+  return [dataUnica];
+}
+
+/** Rótulo do "dia" de uma missa pra exibição: dia da semana, ou a data única formatada. */
+export function formatarDiaMissa(missa: { diaSemana: number | null; dataUnica: string | null }): string {
+  if (missa.diaSemana !== null) return DIAS_SEMANA[missa.diaSemana];
+  if (missa.dataUnica) return format(paraExibicao(lerDataArmazenada(missa.dataUnica)), "dd/MM/yyyy");
+  return "—";
+}
+
 /** Resolve o período [início, fim] de um mês a partir do parâmetro "yyyy-MM" usado no calendário. */
 export function periodoDoMes(mesParam?: string): { periodoInicio: Date; periodoFim: Date } {
   let mesReferencia = new Date();
@@ -84,4 +110,28 @@ export function periodoDoMes(mesParam?: string): { periodoInicio: Date; periodoF
   const periodoFim = new Date(Date.UTC(ano, mes + 1, 0, 23, 59, 59, 999));
 
   return { periodoInicio, periodoFim };
+}
+
+const FUSO_PAROQUIA = "America/Sao_Paulo";
+
+/**
+ * "Agora" no relógio de parede da paróquia ("yyyy-MM-ddTHH:mm"), comparável
+ * direto com o horário das missas — que também é relógio de parede (ver
+ * comentário no topo deste arquivo), independente do fuso do servidor (Vercel roda em UTC).
+ */
+export function agoraNaParoquia(): string {
+  const partes = Object.fromEntries(
+    new Intl.DateTimeFormat("en-CA", {
+      timeZone: FUSO_PAROQUIA,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    })
+      .formatToParts(new Date())
+      .map((p) => [p.type, p.value])
+  );
+  return `${partes.year}-${partes.month}-${partes.day}T${partes.hour}:${partes.minute}`;
 }

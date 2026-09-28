@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { Badge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
+import { buttonClasses } from "@/components/ui/Button";
 import { DeleteButton } from "@/components/admin/DeleteButton";
 import { obterUsuarioAtual } from "@/lib/sessao";
+import { DataTable } from "@/components/ui/DataTable";
 import type { UsuarioRow } from "@/lib/types";
 import { deleteUsuario } from "./actions";
 
@@ -16,8 +17,8 @@ export default async function UsuariosPage() {
   if (usuarioLogado?.papel !== "ADMIN") {
     return (
       <div>
-        <h1 className="text-2xl font-semibold text-gray-900">Usuários</h1>
-        <p className="mt-2 text-sm text-gray-500">Só administradores podem gerenciar usuários.</p>
+        <h1 className="text-2xl font-semibold tracking-tight text-fg">Usuários</h1>
+        <p className="mt-2 text-sm text-muted">Só administradores podem gerenciar usuários.</p>
       </div>
     );
   }
@@ -33,48 +34,51 @@ export default async function UsuariosPage() {
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-gray-900">Usuários</h1>
-        <Link href="/admin/usuarios/nova">
-          <Button>Novo usuário</Button>
+        <h1 className="text-2xl font-semibold tracking-tight text-fg">Usuários</h1>
+        <Link href="/admin/usuarios/nova" className={buttonClasses()}>
+          Novo usuário
         </Link>
       </div>
 
-      <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Usuário</th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Papel</th>
-              <th className="px-4 py-3" />
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {usuarios.map((usuario) => (
-              <tr key={usuario.id}>
-                <td className="px-4 py-3 text-sm font-medium text-gray-900">
-                  {usuario.username}
-                  {usuario.id === usuarioLogado.id ? (
-                    <span className="ml-2 text-xs font-normal text-gray-400">(você)</span>
-                  ) : null}
-                </td>
-                <td className="px-4 py-3 text-sm">
-                  <Badge color={usuario.papel === "ADMIN" ? "yellow" : "gray"}>
-                    {usuario.papel === "ADMIN" ? "Administrador" : "Operador"}
-                  </Badge>
-                </td>
-                <td className="px-4 py-3 text-right text-sm">
-                  {usuario.id === usuarioLogado.id ? null : (
-                    <DeleteButton
-                      action={deleteUsuario.bind(null, usuario.id)}
-                      confirmMessage={`Excluir o usuário "${usuario.username}"?`}
-                    />
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <DataTable
+        vazio="Nenhum usuário cadastrado."
+        ordemPadrao={{ chave: "criadoEm", direcao: "asc" }}
+        colunas={[
+          { chave: "usuario", titulo: "Usuário", ordenavel: true },
+          { chave: "papel", titulo: "Papel", ordenavel: true },
+          { chave: "acoes", titulo: "", alinhar: "right" },
+        ]}
+        linhas={usuarios.map((usuario) => ({
+          id: usuario.id,
+          valores: {
+            usuario: usuario.username,
+            papel: usuario.papel === "ADMIN" ? 0 : 1,
+            criadoEm: usuario.createdAt,
+          },
+          celulas: {
+            usuario: (
+              <span className="font-medium text-fg">
+                {usuario.username}
+                {usuario.id === usuarioLogado.id ? (
+                  <span className="ml-2 text-xs font-normal text-subtle">(você)</span>
+                ) : null}
+              </span>
+            ),
+            papel: (
+              <Badge color={usuario.papel === "ADMIN" ? "yellow" : "gray"}>
+                {usuario.papel === "ADMIN" ? "Administrador" : "Operador"}
+              </Badge>
+            ),
+            acoes:
+              usuario.id === usuarioLogado.id ? null : (
+                <DeleteButton
+                  action={deleteUsuario.bind(null, usuario.id)}
+                  confirmMessage={`Excluir o usuário "${usuario.username}"?`}
+                />
+              ),
+          },
+        }))}
+      />
     </div>
   );
 }

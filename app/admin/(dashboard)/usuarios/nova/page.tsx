@@ -11,7 +11,7 @@ export default async function NovoUsuarioPage() {
 
   return (
     <div>
-      <h1 className="mb-6 text-2xl font-semibold text-gray-900">Novo usuário</h1>
+      <h1 className="mb-6 text-2xl font-semibold tracking-tight text-fg">Novo usuário</h1>
       <UsuarioForm action={createUsuario} />
     </div>
   );

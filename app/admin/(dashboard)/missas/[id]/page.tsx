@@ -3,7 +3,7 @@ import { supabase } from "@/lib/supabase";
 import { MissaForm } from "@/components/admin/MissaForm";
 import { DeleteButton } from "@/components/admin/DeleteButton";
 import { Input } from "@/components/ui/Field";
-import { Button } from "@/components/ui/Button";
+import { SubmitButton } from "@/components/ui/SubmitButton";
 import { PRIORIDADE_LABEL, GRAU_LABEL } from "@/lib/constants";
 import type { FuncaoRow, MissaFuncaoRequisitoRow, MissaRow } from "@/lib/types";
 import { updateMissa, deleteMissa, saveMissaRequisitos } from "../actions";
@@ -39,18 +39,24 @@ export default async function EditarMissaPage({ params }: { params: Promise<{ id
   return (
     <div className="max-w-2xl space-y-10">
       <div>
-        <h1 className="mb-6 text-2xl font-semibold text-gray-900">Editar missa</h1>
+        <h1 className="mb-6 text-2xl font-semibold tracking-tight text-fg">Editar missa</h1>
         <MissaForm action={updateMissa.bind(null, missa.id)} defaultValues={missa} submitLabel="Salvar alterações" />
       </div>
 
       <div>
-        <h2 className="mb-1 text-lg font-semibold text-gray-900">Funções exigidas nesta missa</h2>
-        <p className="mb-4 text-sm text-gray-500">
+        <h2 className="mb-1 text-lg font-semibold text-fg">Funções exigidas nesta missa</h2>
+        <p className="mb-4 text-sm text-muted">
           Marque as funções que essa missa precisa e quantas vagas cada uma tem (ex: 2 ceroferários).
         </p>
 
-        {funcoes.length === 0 ? (
-          <p className="text-sm text-gray-500">Cadastre funções primeiro.</p>
+        {missa.escalarTodosAtivos ? (
+          <p className="rounded-md border border-line bg-surface-2 px-4 py-3 text-sm text-muted">
+            Essa missa está marcada como &quot;precisa de todos os servidores ativos&quot; — não usa
+            funções individuais. Na tela de cada ocorrência, escale todo mundo de uma vez com um
+            clique.
+          </p>
+        ) : funcoes.length === 0 ? (
+          <p className="text-sm text-muted">Cadastre funções primeiro.</p>
         ) : (
           <form action={salvarRequisitos} className="space-y-3">
             {funcoes.map((funcao) => {
@@ -58,17 +64,17 @@ export default async function EditarMissaPage({ params }: { params: Promise<{ id
               return (
                 <div
                   key={funcao.id}
-                  className="flex items-center justify-between gap-4 rounded-md border border-gray-200 bg-white px-4 py-3"
+                  className="flex items-center justify-between gap-4 rounded-md border border-line bg-surface px-4 py-3"
                 >
                   <label className="flex flex-1 items-center gap-3">
                     <input
                       type="checkbox"
                       name={`req_${funcao.id}_ativo`}
                       defaultChecked={Boolean(requisito?.ativo)}
-                      className="h-4 w-4 rounded border-gray-300"
+                      className="h-4 w-4 rounded border-line-strong"
                     />
-                    <span className="text-sm font-medium text-gray-900">{funcao.nome}</span>
-                    <span className="text-xs text-gray-500">
+                    <span className="text-sm font-medium text-fg">{funcao.nome}</span>
+                    <span className="text-xs text-muted">
                       {PRIORIDADE_LABEL[funcao.prioridade]} · {GRAU_LABEL[funcao.grauMinimo]}+
                     </span>
                   </label>
@@ -83,12 +89,12 @@ export default async function EditarMissaPage({ params }: { params: Promise<{ id
                 </div>
               );
             })}
-            <Button type="submit">Salvar funções da missa</Button>
+            <SubmitButton pendingLabel="Salvando">Salvar funções da missa</SubmitButton>
           </form>
         )}
       </div>
 
-      <div className="border-t border-gray-200 pt-6">
+      <div className="border-t border-line pt-6">
         <DeleteButton
           action={deleteMissa.bind(null, missa.id)}
           confirmMessage="Excluir esta missa? Isso também remove ocorrências e escalas geradas para ela."

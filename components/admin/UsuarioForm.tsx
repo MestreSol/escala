@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import { Button } from "@/components/ui/Button";
+import { SubmitButton } from "@/components/ui/SubmitButton";
 import { Input, Label, Select, FieldError } from "@/components/ui/Field";
 import type { UsuarioFormState } from "@/lib/types";
 
@@ -28,14 +28,14 @@ export function UsuarioForm({ action }: UsuarioFormProps) {
           <option value="OPERADOR">Operador</option>
           <option value="ADMIN">Administrador</option>
         </Select>
-        <p className="mt-1 text-xs text-gray-500">
+        <p className="mt-1 text-xs text-muted">
           Administrador também pode cadastrar e excluir outros usuários.
         </p>
       </div>
       <FieldError>{state.error}</FieldError>
-      <Button type="submit" disabled={pending}>
-        {pending ? "Salvando..." : "Criar usuário"}
-      </Button>
+      <SubmitButton pending={pending} pendingLabel="Salvando">
+        Criar usuário
+      </SubmitButton>
     </form>
   );
 }

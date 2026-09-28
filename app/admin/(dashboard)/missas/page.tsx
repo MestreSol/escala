@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
-import { Button } from "@/components/ui/Button";
+import { Badge } from "@/components/ui/Badge";
+import { buttonClasses } from "@/components/ui/Button";
 import { DeleteButton } from "@/components/admin/DeleteButton";
-import { DIAS_SEMANA } from "@/lib/constants";
+import { formatarDiaMissa } from "@/lib/occurrences";
+import { DataTable } from "@/components/ui/DataTable";
 import type { MissaFuncaoRequisitoRow, MissaRow } from "@/lib/types";
 import { deleteMissa } from "./actions";
 
@@ -25,55 +27,58 @@ export default async function MissasPage() {
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-gray-900">Missas</h1>
-        <Link href="/admin/missas/nova">
-          <Button>Nova missa</Button>
+        <h1 className="text-2xl font-semibold tracking-tight text-fg">Missas</h1>
+        <Link href="/admin/missas/nova" className={buttonClasses()}>
+          Nova missa
         </Link>
       </div>
 
-      {missas.length === 0 ? (
-        <p className="text-sm text-gray-500">Nenhuma missa cadastrada ainda.</p>
-      ) : (
-        <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Dia</th>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Horário</th>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Comunidade</th>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Funções</th>
-                <th className="px-4 py-3" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {missas.map((missa) => (
-                <tr key={missa.id}>
-                  <td className="px-4 py-3 text-sm font-medium text-gray-900">{DIAS_SEMANA[missa.diaSemana]}</td>
-                  <td className="px-4 py-3 text-sm text-gray-600">{missa.horario}</td>
-                  <td className="px-4 py-3 text-sm text-gray-600">{missa.comunidade}</td>
-                  <td className="px-4 py-3 text-sm text-gray-600">
-                    {missa.funcoesRequisito.filter((r) => r.ativo).length}
-                  </td>
-                  <td className="px-4 py-3 text-right text-sm">
-                    <div className="flex justify-end gap-4">
-                      <Link
-                        href={`/admin/missas/${missa.id}`}
-                        className="font-medium text-blue-700 hover:text-blue-900"
-                      >
-                        Editar
-                      </Link>
-                      <DeleteButton
-                        action={deleteMissa.bind(null, missa.id)}
-                        confirmMessage={`Excluir a missa de ${DIAS_SEMANA[missa.diaSemana]} às ${missa.horario}? Isso também remove ocorrências e escalas geradas para ela.`}
-                      />
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <DataTable
+        vazio="Nenhuma missa cadastrada ainda."
+        ordemPadrao={{ chave: "dia", direcao: "asc" }}
+        colunas={[
+          { chave: "dia", titulo: "Dia", ordenavel: true },
+          { chave: "horario", titulo: "Horário", ordenavel: true },
+          { chave: "comunidade", titulo: "Comunidade", ordenavel: true },
+          { chave: "funcoes", titulo: "Funções", ordenavel: true },
+          { chave: "acoes", titulo: "", alinhar: "right" },
+        ]}
+        linhas={missas.map((missa) => ({
+          id: missa.id,
+          valores: {
+            // Semanais primeiro (0-6 pelo dia da semana, desempate pelo
+            // horário); datas únicas depois, em ordem cronológica.
+            dia: missa.dataUnica
+              ? `1-${missa.dataUnica}-${missa.horario}`
+              : `0-${missa.diaSemana ?? 9}-${missa.horario}`,
+            horario: missa.horario,
+            comunidade: missa.comunidade,
+            // "Todos os ativos" não tem vagas por função — fica antes de todas.
+            funcoes: missa.escalarTodosAtivos ? -1 : missa.funcoesRequisito.filter((r) => r.ativo).length,
+          },
+          celulas: {
+            dia: <span className="font-medium text-fg">{formatarDiaMissa(missa)}</span>,
+            horario: <span className="tabular-nums text-muted">{missa.horario}</span>,
+            comunidade: <span className="text-muted">{missa.comunidade}</span>,
+            funcoes: missa.escalarTodosAtivos ? (
+              <Badge color="blue">Todos os ativos</Badge>
+            ) : (
+              <span className="tabular-nums text-muted">{missa.funcoesRequisito.filter((r) => r.ativo).length}</span>
+            ),
+            acoes: (
+              <div className="flex justify-end gap-4">
+                <Link href={`/admin/missas/${missa.id}`} className="font-medium text-accent hover:text-accent-hover">
+                  Editar
+                </Link>
+                <DeleteButton
+                  action={deleteMissa.bind(null, missa.id)}
+                  confirmMessage={`Excluir a missa de ${formatarDiaMissa(missa)} às ${missa.horario}? Isso também remove ocorrências e escalas geradas para ela.`}
+                />
+              </div>
+            ),
+          },
+        }))}
+      />
     </div>
   );
 }
