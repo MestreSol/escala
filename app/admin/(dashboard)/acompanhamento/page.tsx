@@ -12,10 +12,8 @@ const GRAU_COLOR: Record<string, "green" | "blue" | "yellow"> = {
   CERIMONIARIO: "yellow",
 };
 
-// Coluna do nome fica fixa ao rolar a tabela pro lado (muitas funções).
 const COLUNA_FIXA = "sticky left-0 z-10 bg-surface shadow-[1px_0_0_var(--color-line)]";
 
-// Página lê dados do banco a cada acesso — nunca deve ser congelada em build.
 export const dynamic = "force-dynamic";
 
 export default async function AcompanhamentoPage() {
@@ -48,10 +46,6 @@ export default async function AcompanhamentoPage() {
   const funcoes = funcoesResult.data ?? [];
   const atribuicoes = atribuicoesResult.data ?? [];
 
-  // Contagem por servidor+função (quantas vezes exerceu cada função) e o
-  // conjunto de ocorrências distintas em que serviu (total de missas —
-  // dedupe necessário porque acúmulo de função pode gerar duas linhas de
-  // EscalaAtribuicao para o mesmo servidor na mesma ocorrência).
   const contagemPorServidorFuncao = new Map<string, number>();
   const ocorrenciasPorServidor = new Map<string, Set<string>>();
 

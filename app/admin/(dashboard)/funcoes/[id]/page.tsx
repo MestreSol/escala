@@ -7,7 +7,6 @@ import { getFuncoesQuePodeAssumir } from "@/lib/funcaoAcumulacao";
 import type { FuncaoRow } from "@/lib/types";
 import { updateFuncao, saveFuncaoAcumulacoes } from "../actions";
 
-// Página lê dados do banco a cada acesso — nunca deve ser congelada em build.
 export const dynamic = "force-dynamic";
 
 export default async function EditarFuncaoPage({ params }: { params: Promise<{ id: string }> }) {

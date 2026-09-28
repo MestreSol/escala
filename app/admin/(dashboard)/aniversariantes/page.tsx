@@ -14,7 +14,6 @@ const GRAU_COLOR: Record<string, "green" | "blue" | "yellow"> = {
   CERIMONIARIO: "yellow",
 };
 
-// Página lê dados do banco a cada acesso — nunca deve ser congelada em build.
 export const dynamic = "force-dynamic";
 
 type ServidorComNascimento = {
@@ -34,9 +33,6 @@ export default async function AniversariantesPage({
   const { mes } = await searchParams;
   const hoje = new Date();
 
-  // Aniversário se repete todo ano — a navegação é só pelo mês (1-12), sem
-  // amarrar a um ano específico. "Vai completar" abaixo assume o ano civil
-  // atual (ver comentário mais abaixo).
   const mesParam = Number(mes);
   const mesSelecionado = Number.isInteger(mesParam) && mesParam >= 1 && mesParam <= 12 ? mesParam : hoje.getMonth() + 1;
   const indiceMesSelecionado = mesSelecionado - 1;
@@ -54,9 +50,6 @@ export default async function AniversariantesPage({
     .filter((s) => s.nascimento.getUTCMonth() === indiceMesSelecionado)
     .sort((a, b) => a.nascimento.getUTCDate() - b.nascimento.getUTCDate() || a.nome.localeCompare(b.nome, "pt-BR"));
 
-  // paraExibicao converte a âncora UTC pra um Date cujos getters *locais*
-  // já são (2000, indiceMesSelecionado, 1) — necessário porque format() do
-  // date-fns lê pelo fuso local do processo (ver lib/occurrences.ts).
   const nomeMes = format(paraExibicao(new Date(Date.UTC(2000, indiceMesSelecionado, 1))), "MMMM", { locale: ptBR });
   const nomeMesCapitalizado = nomeMes.charAt(0).toUpperCase() + nomeMes.slice(1);
   const mesAnterior = mesSelecionado === 1 ? 12 : mesSelecionado - 1;

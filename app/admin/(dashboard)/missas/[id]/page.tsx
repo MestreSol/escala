@@ -9,7 +9,6 @@ import { PRIORIDADE_LABEL, GRAU_LABEL } from "@/lib/constants";
 import type { FuncaoRow, MissaFuncaoRequisitoRow, MissaRow } from "@/lib/types";
 import { updateMissa, deleteMissa, saveMissaRequisitos } from "../actions";
 
-// Página lê dados do banco a cada acesso — nunca deve ser congelada em build.
 export const dynamic = "force-dynamic";
 
 export default async function EditarMissaPage({ params }: { params: Promise<{ id: string }> }) {
@@ -47,8 +46,6 @@ export default async function EditarMissaPage({ params }: { params: Promise<{ id
           action={updateMissa.bind(null, missa.id)}
           defaultValues={{
             ...missa,
-            // Âncora sempre em meia-noite UTC (ver lib/occurrences.ts); os 10
-            // primeiros caracteres já são o "yyyy-MM-dd" do <input type="date">.
             dataUnica: missa.dataUnica?.slice(0, 10) ?? null,
           }}
           submitLabel="Salvar alterações"

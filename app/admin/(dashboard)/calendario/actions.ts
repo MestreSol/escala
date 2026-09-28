@@ -73,9 +73,6 @@ async function montarSlotsEmAberto(periodoInicio: Date, periodoFim: Date) {
       .in("ocorrenciaId", ocorrenciaIds)
       .returns<(EscalaAtribuicaoRow & { ocorrencia: { data: string } })[]>();
     if (error) throw error;
-    // Linhas de funcaoId nulo são da lista de presença simples (missas
-    // escalarTodosAtivos) — não participam do sistema de função/vaga, então
-    // ficam de fora do rastreamento do gerador (que só entende função real).
     atribuicoesExistentes = (data ?? [])
       .filter((a): a is typeof a & { funcaoId: string } => a.funcaoId !== null)
       .map((a) => ({
@@ -93,14 +90,9 @@ async function montarSlotsEmAberto(periodoInicio: Date, periodoFim: Date) {
 
   const slots: SlotParaPreencher[] = [];
   for (const ocorrencia of ocorrencias ?? []) {
-    // "Todos os coroinhas": sem vagas por função (lista de presença, ver
-    // escalarTodosAtivos) — o gerador não mexe nessas missas.
     if (ocorrencia.missa.escalarTodosAtivos) continue;
 
     const reqs = requisitosPorMissa.get(ocorrencia.missaId) ?? [];
-    // Missa de comunidade responsável sorteia só entre aquela comunidade;
-    // missa grande (data única) sorteia entre todos os ativos, porque não
-    // entra na lista de preferências da inscrição; semanal usa a preferência.
     const modoEscalacao: ModoEscalacao = ocorrencia.missa.comunidadeResponsavel
       ? "COMUNIDADE"
       : ocorrencia.missa.dataUnica
@@ -218,11 +210,6 @@ export async function gerarEscalaPeriodo(periodoInicioISO: string, periodoFimISO
   revalidatePath("/admin/calendario");
 }
 
-/**
- * Mesma regra do gerador automático (ver gerarEscala/marcarUsoNoDia): um
- * servidor não pode ser escalado manualmente numa segunda missa no mesmo dia
- * civil, qualquer que seja a função. Ignora a própria ocorrência sendo editada.
- */
 async function validarSemConflitoNoDia(servidorId: string, ocorrenciaId: string, servidorNome: string) {
   const { data: ocorrenciaAtual, error: ocorrenciaError } = await supabase
     .from("MissaOcorrencia")
@@ -243,8 +230,6 @@ async function validarSemConflitoNoDia(servidorId: string, ocorrenciaId: string,
     .returns<{ ocorrenciaId: string; funcaoId: string | null; ocorrencia: { data: string } }[]>();
   if (error) throw error;
 
-  // funcaoId nulo = linha de lista de presença simples (missa escalarTodosAtivos,
-  // sem função individual) — não é escala individual, não conta aqui.
   const temConflito = (outrasAtribuicoes ?? []).some(
     (a) => a.funcaoId !== null && diaChave(lerDataArmazenada(a.ocorrencia.data)) === diaAtual
   );
@@ -318,11 +303,6 @@ export async function atualizarAtribuicaoManual(
   revalidatePath("/admin/calendario");
 }
 
-/**
- * Registra se o servidor escalado numa vaga compareceu ou não à missa.
- * Alimenta lib/frequencia.ts, que rebaixa a prioridade de quem falta muito
- * nas próximas gerações de escala (ver ServidorCandidato.frequenciaBaixa).
- */
 export async function registrarPresenca(
   ocorrenciaId: string,
   funcaoId: string,
@@ -345,13 +325,6 @@ export async function registrarPresenca(
   revalidatePath("/admin/acompanhamento");
 }
 
-/**
- * Escala de uma vez todo servidor ativo que ainda não está na lista de
- * presença desta ocorrência (missas `escalarTodosAtivos` — ver Missa). Cada
- * linha é uma EscalaAtribuicao com funcaoId nulo (sem função individual,
- * só presença). Marcado geradoAutomaticamente: false pra "Regenerar tudo"
- * (que só mexe no sistema normal de função/vaga) nunca apagar essa lista.
- */
 export async function escalarTodosAtivos(ocorrenciaId: string) {
   await exigirUsuario();
   const [{ data: servidores, error: servidoresError }, { data: existentes, error: existentesError }] =
@@ -391,7 +364,6 @@ export async function escalarTodosAtivos(ocorrenciaId: string) {
   revalidatePath(`/admin/calendario/${ocorrenciaId}`);
 }
 
-/** Adiciona manualmente um único servidor à lista de presença simples (ex: alguém fora dos ativos no momento do "escalar todos"). */
 export async function adicionarNaListaTodosAtivos(ocorrenciaId: string, formData: FormData) {
   await exigirUsuario();
   const servidorId = String(formData.get("servidorId") ?? "").trim();
@@ -430,7 +402,6 @@ export async function adicionarNaListaTodosAtivos(ocorrenciaId: string, formData
   revalidatePath(`/admin/calendario/${ocorrenciaId}`);
 }
 
-/** Remove uma linha da lista de presença simples (ex: alguém avisou que não vai mais). */
 export async function removerDaListaTodosAtivos(ocorrenciaId: string, atribuicaoId: string) {
   await exigirUsuario();
   const { error } = await supabase.from("EscalaAtribuicao").delete().eq("id", atribuicaoId);
@@ -439,7 +410,6 @@ export async function removerDaListaTodosAtivos(ocorrenciaId: string, atribuicao
   revalidatePath(`/admin/calendario/${ocorrenciaId}`);
 }
 
-/** Registra presença numa linha da lista simples (endereça por id — não há função/slotIndex útil pra chave composta aqui). */
 export async function registrarPresencaTodosAtivos(ocorrenciaId: string, atribuicaoId: string, formData: FormData) {
   await exigirUsuario();
   const valor = String(formData.get("presente") ?? "");
@@ -483,14 +453,6 @@ export async function regenerarEscalaPeriodo(periodoInicioISO: string, periodoFi
   await gerarEscalaPeriodo(periodoInicioISO, periodoFimISO);
 }
 
-/**
- * Apaga TODAS as atribuições do período (automáticas e manuais), sem gerar
- * nada em seguida — diferente de `regenerarEscalaPeriodo`, que só limpa as
- * automáticas e já sorteia de novo. Usado para dar um "reset" completo no mês
- * quando o botão "Gerar escala" não preenche mais nada (porque toda vaga já
- * tem uma linha de atribuição, mesmo que em aberto ou editada manualmente) e
- * é preciso liberar todos os slots antes de gerar de novo.
- */
 export async function apagarEscalaPeriodo(periodoInicioISO: string, periodoFimISO: string) {
   await exigirUsuario();
   const periodoInicio = new Date(periodoInicioISO);
@@ -513,7 +475,6 @@ export async function apagarEscalaPeriodo(periodoInicioISO: string, periodoFimIS
   revalidatePath("/admin/calendario");
 }
 
-/** Libera a escala do mês ("yyyy-MM") na página pública /escala. */
 export async function publicarEscalaMes(mes: string) {
   await exigirUsuario();
   await publicarMes(mes);
@@ -521,7 +482,6 @@ export async function publicarEscalaMes(mes: string) {
   revalidatePath("/escala");
 }
 
-/** Tira o mês da página pública (a escala continua no banco, só fica oculta). */
 export async function despublicarEscalaMes(mes: string) {
   await exigirUsuario();
   await despublicarMes(mes);

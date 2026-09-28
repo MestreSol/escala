@@ -27,7 +27,6 @@ import {
   registrarPresencaTodosAtivos,
 } from "../actions";
 
-// Página lê dados do banco a cada acesso — nunca deve ser congelada em build.
 export const dynamic = "force-dynamic";
 
 type OcorrenciaComDetalhes = MissaOcorrenciaRow & {

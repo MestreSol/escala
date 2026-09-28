@@ -7,7 +7,6 @@ import { getVinculosDoServidor } from "@/lib/servidorVinculo";
 import type { MissaOption, ServidorMissaPreferenciaRow, ServidorRow } from "@/lib/types";
 import { updateServidor, saveServidorVinculos, atualizarFotoServidor } from "../actions";
 
-// Página lê dados do banco a cada acesso — nunca deve ser congelada em build.
 export const dynamic = "force-dynamic";
 
 export default async function EditarServidorPage({ params }: { params: Promise<{ id: string }> }) {
@@ -24,7 +23,6 @@ export default async function EditarServidorPage({ params }: { params: Promise<{
       .from("Missa")
       .select("*")
       .eq("ativo", true)
-      // Mesmo filtro da inscrição: só semanais sorteadas por preferência.
       .eq("escalarTodosAtivos", false)
       .is("dataUnica", null)
       .order("diaSemana", { ascending: true })
@@ -62,9 +60,6 @@ export default async function EditarServidorPage({ params }: { params: Promise<{
           missas={missas}
           defaultValues={{
             ...servidor,
-            // A âncora vem sempre em meia-noite UTC (ver lib/occurrences.ts);
-            // os 10 primeiros caracteres já são o "yyyy-MM-dd" esperado pelo
-            // <input type="date">, sem risco de deslocar de dia.
             dataNascimento: servidor.dataNascimento?.slice(0, 10) ?? "",
             missaIds: servidor.preferenciasMissas.map((p) => p.missaId),
           }}
@@ -81,7 +76,6 @@ export default async function EditarServidorPage({ params }: { params: Promise<{
           className="flex items-center gap-6 rounded-xl border border-line bg-surface p-6"
         >
           {servidor.fotoUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element -- URL externa (Supabase Storage), não dá pra usar next/image sem configurar o domínio.
             <img src={servidor.fotoUrl} alt={servidor.nome} className="size-24 shrink-0 rounded-xl object-cover" />
           ) : (
             <div className="flex size-24 shrink-0 items-center justify-center rounded-xl bg-surface-2 text-xs text-subtle">

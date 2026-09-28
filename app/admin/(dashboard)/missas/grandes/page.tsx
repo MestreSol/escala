@@ -10,7 +10,6 @@ import { lerDataArmazenada, paraExibicao } from "@/lib/occurrences";
 import type { MissaFuncaoRequisitoRow, MissaRow } from "@/lib/types";
 import { deleteMissa } from "../actions";
 
-// Página lê dados do banco a cada acesso — nunca deve ser congelada em build.
 export const dynamic = "force-dynamic";
 
 type MissaComRequisitos = MissaRow & { funcoesRequisito: MissaFuncaoRequisitoRow[] };

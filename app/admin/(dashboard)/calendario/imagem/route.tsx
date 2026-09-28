@@ -7,11 +7,9 @@ import { periodoDoMes, paraExibicao } from "@/lib/occurrences";
 import { buscarEscalaDoPeriodo, type LinhaEscala } from "@/lib/escalaDoPeriodo";
 
 export const runtime = "nodejs";
-// Lê dados do banco a cada acesso — nunca deve ser congelada em build.
 export const dynamic = "force-dynamic";
 
 const LARGURA = 900;
-// Mesmas cores do tema escuro do site (ver app/globals.css).
 const COR_FUNDO = "#0b0b0c";
 const COR_CARTAO = "#131316";
 const COR_TEXTO = "#ededee";
@@ -168,12 +166,6 @@ export async function GET(request: Request) {
     }
   );
 
-  // O Next define "public, max-age=0, must-revalidate" por padrão em
-  // produção — sem um validador (ETag/Last-Modified), isso deixa margem pra
-  // caches intermediários (CDN, proxy) servirem uma imagem antiga em vez de
-  // revalidar. Como esta rota sempre reflete o estado atual do banco (missas
-  // e atribuições podem ser apagadas a qualquer momento), forçamos no-store
-  // pra garantir que a imagem de confirmação nunca fique desatualizada.
   response.headers.set("Cache-Control", "no-store");
   return response;
 }

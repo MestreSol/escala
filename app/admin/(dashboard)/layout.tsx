@@ -16,8 +16,6 @@ const NAV_ITEMS = [
 
 export default async function AdminLayout({ children }: { children: ReactNode }) {
   const usuarioLogado = await obterUsuarioAtual();
-  // O proxy só confere a assinatura do cookie; aqui confere que o usuário
-  // ainda existe no banco (ex: foi excluído com a sessão aberta).
   if (!usuarioLogado) redirect("/admin/login");
   const navItems =
     usuarioLogado?.papel === "ADMIN" ? [...NAV_ITEMS, { href: "/admin/usuarios", label: "Usuários" }] : NAV_ITEMS;

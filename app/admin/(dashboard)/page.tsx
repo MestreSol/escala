@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 
-// Página lê dados do banco a cada acesso — nunca deve ser congelada em build.
 export const dynamic = "force-dynamic";
 
 export default async function AdminDashboardPage() {

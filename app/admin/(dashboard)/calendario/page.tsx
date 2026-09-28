@@ -32,7 +32,6 @@ const COR_SEM_ESCALA = "bg-surface-2 text-muted ring-line";
 const COR_EM_ABERTO = "bg-danger-soft text-danger ring-danger/20";
 const COR_COMPLETA = "bg-ok-soft text-ok ring-ok/20";
 
-// Página lê e materializa dados do banco a cada acesso — nunca deve ser congelada em build.
 export const dynamic = "force-dynamic";
 
 export default async function CalendarioPage({
@@ -58,9 +57,6 @@ export default async function CalendarioPage({
   if (ocorrenciasResult.error) throw ocorrenciasResult.error;
   if (requisitosResult.error) throw requisitosResult.error;
 
-  // As datas vêm "ancoradas em UTC" (ver lib/occurrences.ts); convertidas
-  // aqui para exibição, para que format()/isSameDay() (que usam o fuso
-  // local do processo) mostrem o horário de missa certo em qualquer fuso.
   const ocorrencias = (ocorrenciasResult.data ?? []).map((o) => ({
     ...o,
     dataExibicao: paraExibicao(lerDataArmazenada(o.data)),
