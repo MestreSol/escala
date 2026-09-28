@@ -5,27 +5,69 @@ import { redirect } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { generateId, nowIso } from "@/lib/db";
 import { missaSchema } from "@/lib/validations";
+import type { MissaInput } from "@/lib/validations";
 import { parseDataUnica } from "@/lib/occurrences";
 
 export type MissaFormState = { error?: string };
 
+// FormData.get devolve null pra campo ausente (ex: comunidadeResponsavel só
+// existe no form quando o modo é COMUNIDADE) — zod .optional()/.default()
+// só tratam undefined, não null, e rejeitavam com "expected string, received null".
+function campo(formData: FormData, nome: string) {
+  return formData.get(nome) ?? undefined;
+}
+
 function parseMissaForm(formData: FormData) {
+  const tipo = formData.get("tipo") === "DATA_UNICA" ? "DATA_UNICA" : "RECORRENTE";
+
+  if (tipo === "DATA_UNICA") {
+    return missaSchema.safeParse({
+      tipo,
+      dataUnica: campo(formData, "dataUnica"),
+      modoEscalacao: campo(formData, "modoEscalacao"),
+      comunidadeResponsavel: campo(formData, "comunidadeResponsavel"),
+      horario: campo(formData, "horario"),
+      comunidade: campo(formData, "comunidade"),
+    });
+  }
+
   return missaSchema.safeParse({
-    tipoRecorrencia: formData.get("tipoRecorrencia"),
-    diaSemana: formData.get("diaSemana") || undefined,
-    dataUnica: formData.get("dataUnica") || undefined,
-    horario: formData.get("horario"),
-    comunidade: formData.get("comunidade"),
-    escalarTodosAtivos: formData.get("escalarTodosAtivos") === "on",
+    tipo,
+    diaSemana: campo(formData, "diaSemana"),
+    modoEscalacao: campo(formData, "modoEscalacao"),
+    horario: campo(formData, "horario"),
+    comunidade: campo(formData, "comunidade"),
   });
 }
 
-/** Só um de diaSemana/dataUnica vai pro banco, conforme o tipo escolhido — o outro é sempre nulo. */
-function montarCamposRecorrencia(dados: { tipoRecorrencia: "semanal" | "unica"; diaSemana?: number; dataUnica?: string }) {
-  if (dados.tipoRecorrencia === "semanal") {
-    return { diaSemana: dados.diaSemana ?? null, dataUnica: null };
+/**
+ * Sempre grava todos os campos de recorrência/modo explicitamente — sem isso,
+ * trocar uma missa de data única pra semanal (ou mudar o modo) deixaria
+ * dataUnica/escalarTodosAtivos/comunidadeResponsavel "grudados" no banco.
+ * diaSemana e dataUnica são exclusivos: só um fica preenchido.
+ */
+function paraLinhaDb(dados: MissaInput) {
+  const escalarTodosAtivos = dados.modoEscalacao === "LISTA_TODOS";
+
+  if (dados.tipo === "DATA_UNICA") {
+    return {
+      diaSemana: null,
+      dataUnica: parseDataUnica(dados.dataUnica).toISOString(),
+      horario: dados.horario,
+      comunidade: dados.comunidade,
+      escalarTodosAtivos,
+      comunidadeResponsavel: dados.modoEscalacao === "COMUNIDADE" ? dados.comunidadeResponsavel : null,
+    };
   }
-  return { diaSemana: null, dataUnica: dados.dataUnica ? parseDataUnica(dados.dataUnica).toISOString() : null };
+
+  return {
+    diaSemana: dados.diaSemana,
+    dataUnica: null,
+    horario: dados.horario,
+    comunidade: dados.comunidade,
+    escalarTodosAtivos,
+    comunidadeResponsavel: null,
+  };
 }
 
 export async function createMissa(_prevState: MissaFormState, formData: FormData): Promise<MissaFormState> {
@@ -34,14 +76,10 @@ export async function createMissa(_prevState: MissaFormState, formData: FormData
     return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
   }
 
-  const { tipoRecorrencia, diaSemana, dataUnica, ...resto } = parsed.data;
   const id = generateId();
-  const { error } = await supabase.from("Missa").insert({
-    id,
-    ...resto,
-    ...montarCamposRecorrencia({ tipoRecorrencia, diaSemana, dataUnica }),
-    updatedAt: nowIso(),
-  });
+  const { error } = await supabase
+    .from("Missa")
+    .insert({ id, ...paraLinhaDb(parsed.data), updatedAt: nowIso() });
   if (error) return { error: error.message };
 
   revalidatePath("/admin/missas");
@@ -58,14 +96,9 @@ export async function updateMissa(
     return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
   }
 
-  const { tipoRecorrencia, diaSemana, dataUnica, ...resto } = parsed.data;
   const { error } = await supabase
     .from("Missa")
-    .update({
-      ...resto,
-      ...montarCamposRecorrencia({ tipoRecorrencia, diaSemana, dataUnica }),
-      updatedAt: nowIso(),
-    })
+    .update({ ...paraLinhaDb(parsed.data), updatedAt: nowIso() })
     .eq("id", id);
   if (error) return { error: error.message };
 

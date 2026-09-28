@@ -4,20 +4,23 @@ import { useState } from "react";
 import { useFormStatus } from "react-dom";
 import { Spinner } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { executarComToast } from "@/components/ui/ActionForm";
 
 export function DeleteButton({
   action,
   confirmMessage,
   label = "Excluir",
+  successMessage = "Excluído.",
 }: {
   action: () => Promise<void>;
   confirmMessage: string;
   label?: string;
+  successMessage?: string;
 }) {
   const [confirmando, setConfirmando] = useState(false);
 
   return (
-    <form action={action}>
+    <form action={() => executarComToast(action, successMessage, "Não foi possível excluir.")}>
       <DeleteTrigger label={label} onClick={() => setConfirmando(true)} />
       <ConfirmDialog
         aberto={confirmando}

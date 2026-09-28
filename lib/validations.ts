@@ -8,23 +8,43 @@ export const funcaoSchema = z.object({
   exigeGrupoCompleto: z.coerce.boolean().default(false),
 });
 
-export const missaSchema = z
+const missaCamposComuns = {
+  horario: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Horário inválido (HH:mm)"),
+  comunidade: z.string().trim().min(2, "Informe a comunidade"),
+};
+
+/**
+ * Quem serve numa missa (ver Missa no schema e lib/scheduleGenerator.ts):
+ * NORMAL = sorteio entre quem marcou a missa como preferida (só semanais);
+ * TODOS_ATIVOS = sorteio das funções entre todos os ativos (só data única);
+ * COMUNIDADE = sorteio só entre a comunidade responsável (só data única);
+ * LISTA_TODOS = sem funções, todo ativo numa lista de presença ("TODOS OS COROINHAS").
+ */
+export const modoEscalacaoSchema = z.enum(["NORMAL", "TODOS_ATIVOS", "COMUNIDADE", "LISTA_TODOS"]);
+export type ModoMissa = z.infer<typeof modoEscalacaoSchema>;
+
+const missaRecorrenteSchema = z.object({
+  tipo: z.literal("RECORRENTE"),
+  diaSemana: z.coerce.number().int().min(0).max(6),
+  modoEscalacao: z.enum(["NORMAL", "LISTA_TODOS"]).default("NORMAL"),
+  ...missaCamposComuns,
+});
+
+// "Missa grande" — evento de data única (ex: Natal), fora do ciclo semanal.
+const missaDataUnicaSchema = z
   .object({
-    tipoRecorrencia: z.enum(["semanal", "unica"]),
-    diaSemana: z.coerce.number().int().min(0).max(6).optional(),
-    dataUnica: z.string().optional(),
-    horario: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Horário inválido (HH:mm)"),
-    comunidade: z.string().trim().min(2, "Informe a comunidade"),
-    escalarTodosAtivos: z.coerce.boolean().default(false),
+    tipo: z.literal("DATA_UNICA"),
+    dataUnica: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Informe uma data válida"),
+    modoEscalacao: z.enum(["TODOS_ATIVOS", "COMUNIDADE", "LISTA_TODOS"]).default("TODOS_ATIVOS"),
+    comunidadeResponsavel: z.string().trim().optional(),
+    ...missaCamposComuns,
   })
-  .superRefine((data, ctx) => {
-    if (data.tipoRecorrencia === "semanal" && data.diaSemana === undefined) {
-      ctx.addIssue({ code: "custom", message: "Selecione o dia da semana", path: ["diaSemana"] });
-    }
-    if (data.tipoRecorrencia === "unica" && !data.dataUnica) {
-      ctx.addIssue({ code: "custom", message: "Informe a data do evento", path: ["dataUnica"] });
-    }
+  .refine((d) => d.modoEscalacao !== "COMUNIDADE" || Boolean(d.comunidadeResponsavel && d.comunidadeResponsavel.length >= 2), {
+    message: "Informe a comunidade responsável",
+    path: ["comunidadeResponsavel"],
   });
+
+export const missaSchema = z.discriminatedUnion("tipo", [missaRecorrenteSchema, missaDataUnicaSchema]);
 
 export const missaFuncaoRequisitoSchema = z.object({
   funcaoId: z.string().min(1),
@@ -33,7 +53,9 @@ export const missaFuncaoRequisitoSchema = z.object({
 
 export const servidorSchema = z.object({
   nome: z.string().trim().min(2, "Informe o nome"),
-  idade: z.coerce.number().int().min(1, "Informe uma idade válida").max(120),
+  dataNascimento: z.coerce
+    .date({ message: "Informe uma data de nascimento válida" })
+    .max(new Date(), { message: "Data de nascimento não pode ser no futuro" }),
   comunidade: z.string().trim().min(2, "Informe a comunidade"),
   categoria: z.enum(["COROINHA", "ACOLITO", "CERIMONIARIO"], {
     message: "Selecione a categoria do servidor",

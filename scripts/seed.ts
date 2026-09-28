@@ -168,6 +168,14 @@ const DISTRIBUICAO: { categoria: Grau; quantidade: number; idade: [number, numbe
   { categoria: "CERIMONIARIO", quantidade: 4, idade: [18, 35] },
 ];
 
+/** Data de nascimento aleatória (âncora meia-noite UTC) de alguém com a idade dada hoje. */
+function dataNascimentoParaIdade(idade: number): string {
+  const hoje = new Date();
+  const diasAtras = inteiroEntre(0, 364);
+  const data = new Date(Date.UTC(hoje.getUTCFullYear() - idade, hoje.getUTCMonth(), hoje.getUTCDate() - diasAtras));
+  return data.toISOString();
+}
+
 /** Próximos domingos (meia-noite UTC, como MissaOcorrencia.data) a partir de hoje. */
 function proximosDomingos(quantidade: number): Date[] {
   const hoje = new Date();
@@ -237,7 +245,7 @@ async function main() {
   const servidores: {
     id: string;
     nome: string;
-    idade: number;
+    dataNascimento: string;
     comunidade: string;
     categoria: Grau;
     preferencias: string[];
@@ -258,7 +266,7 @@ async function main() {
       servidores.push({
         id: novoId(),
         nome,
-        idade: inteiroEntre(...grupo.idade),
+        dataNascimento: dataNascimentoParaIdade(inteiroEntre(...grupo.idade)),
         comunidade,
         categoria: grupo.categoria,
         preferencias,
@@ -277,7 +285,7 @@ async function main() {
     servidores.map((s) => ({
       id: s.id,
       nome: s.nome,
-      idade: s.idade,
+      dataNascimento: s.dataNascimento,
       comunidade: s.comunidade,
       categoria: s.categoria,
       updatedAt: agora,

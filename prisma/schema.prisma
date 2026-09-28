@@ -70,24 +70,30 @@ model Funcao {
 }
 
 model Missa {
-  id         String   @id @default(cuid())
+  id                    String    @id @default(cuid())
   /// Recorrência semanal (0-6, domingo-sábado). Exclusivo com `dataUnica` —
   /// toda missa tem exatamente um dos dois preenchido.
-  diaSemana  Int?
+  diaSemana             Int?
   /// Data única (âncora UTC meia-noite, como MissaOcorrencia.data — ver
-  /// lib/occurrences.ts), pra eventos sazonais que não se repetem toda
-  /// semana (ex: Nossa Senhora Aparecida). Exclusivo com `diaSemana`.
-  dataUnica  DateTime?
-  horario    String
-  comunidade String
+  /// lib/occurrences.ts): "missa grande" de evento único (ex: Natal, Nossa
+  /// Senhora Aparecida), fora do ciclo semanal. Exclusivo com `diaSemana`.
+  /// Não entra na lista de preferências da inscrição; com funções, as vagas
+  /// são sorteadas entre todos os ativos ou só a `comunidadeResponsavel`.
+  dataUnica             DateTime?
+  horario               String
+  comunidade            String
   /// Se true, a missa não usa o sistema normal de função/vaga: ao clicar em
   /// "Escalar todos os ativos" na ocorrência, todo servidor ativo entra numa
   /// lista de presença simples, sem função individual (ver EscalaAtribuicao
-  /// com funcaoId nulo). Pensado pra eventos que precisam de todo mundo.
-  escalarTodosAtivos Boolean  @default(false)
-  ativo      Boolean  @default(true)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  /// com funcaoId nulo). Na escala aparece "TODOS OS COROINHAS".
+  escalarTodosAtivos    Boolean   @default(false)
+  /// Missa de responsabilidade de uma comunidade: só servidores com
+  /// Servidor.comunidade igual a este valor são sorteados para as funções,
+  /// ignorando a preferência de missa (ver lib/scheduleGenerator.ts).
+  comunidadeResponsavel String?
+  ativo                 Boolean   @default(true)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
   funcoesRequisito       MissaFuncaoRequisito[]
   preferenciasServidores ServidorMissaPreferencia[]
@@ -108,15 +114,20 @@ model MissaFuncaoRequisito {
 }
 
 model Servidor {
-  id         String   @id @default(cuid())
-  nome       String
-  idade      Int
-  comunidade String
+  id             String    @id @default(cuid())
+  nome           String
+  /// Âncora de dia civil (meia-noite UTC, mesma convenção de MissaOcorrencia.data
+  /// — ver lib/occurrences.ts). Nullable: servidores migrados de `idade` (removida)
+  /// ficam sem data até o admin preencher; ver lib/idade.ts para cálculo de idade.
+  dataNascimento DateTime?
+  /// URL pública do Storage (bucket "fotos-servidores") — ver lib/storage.ts.
+  fotoUrl        String?
+  comunidade     String
   /// Grau do servidor. Determina quais funções ele pode exercer (o dele e os abaixo).
-  categoria  Grau
-  ativo      Boolean  @default(true)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  categoria      Grau
+  ativo          Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   preferenciasMissas ServidorMissaPreferencia[]
   atribuicoes        EscalaAtribuicao[]

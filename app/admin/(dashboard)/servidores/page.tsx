@@ -4,6 +4,8 @@ import { Badge } from "@/components/ui/Badge";
 import { DeleteButton } from "@/components/admin/DeleteButton";
 import { GRAU_LABEL, GRAU_ORDEM } from "@/lib/constants";
 import { DataTable } from "@/components/ui/DataTable";
+import { lerDataArmazenada } from "@/lib/occurrences";
+import { calcularIdade } from "@/lib/idade";
 import type { ServidorMissaPreferenciaRow, ServidorRow } from "@/lib/types";
 import { deleteServidor } from "./actions";
 
@@ -87,18 +89,40 @@ export default async function ServidoresPage({
           { chave: "missas", titulo: "Missas", ordenavel: true },
           { chave: "acoes", titulo: "", alinhar: "right" },
         ]}
-        linhas={servidores.map((servidor) => ({
+        linhas={servidores.map((servidor) => {
+          const idade = servidor.dataNascimento ? calcularIdade(lerDataArmazenada(servidor.dataNascimento)) : null;
+          return {
           id: servidor.id,
           valores: {
             nome: servidor.nome,
-            idade: servidor.idade,
+            idade,
             comunidade: servidor.comunidade,
             categoria: GRAU_ORDEM[servidor.categoria] ?? null,
             missas: servidor.preferenciasMissas.length,
           },
           celulas: {
-            nome: <span className="font-medium text-fg">{servidor.nome}</span>,
-            idade: <span className="tabular-nums text-muted">{servidor.idade}</span>,
+            nome: (
+              <span className="flex items-center gap-2.5 font-medium text-fg">
+                {servidor.fotoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={servidor.fotoUrl} alt="" className="size-7 shrink-0 rounded-full object-cover" />
+                ) : (
+                  <span
+                    aria-hidden
+                    className="flex size-7 shrink-0 items-center justify-center rounded-full bg-surface-2 text-[11px] text-muted"
+                  >
+                    {servidor.nome.charAt(0)}
+                  </span>
+                )}
+                {servidor.nome}
+              </span>
+            ),
+            idade:
+              idade === null ? (
+                <span className="text-subtle">—</span>
+              ) : (
+                <span className="tabular-nums text-muted">{idade}</span>
+              ),
             comunidade: <span className="text-muted">{servidor.comunidade}</span>,
             categoria: <Badge color={GRAU_COLOR[servidor.categoria]}>{GRAU_LABEL[servidor.categoria]}</Badge>,
             missas: <span className="tabular-nums text-muted">{servidor.preferenciasMissas.length}</span>,
@@ -114,7 +138,8 @@ export default async function ServidoresPage({
               </div>
             ),
           },
-        }))}
+          };
+        })}
       />
     </div>
   );

@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { Badge } from "@/components/ui/Badge";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
+import { ActionForm } from "@/components/ui/ActionForm";
 import { PresencaSelect } from "@/components/admin/PresencaSelect";
 import { DeleteButton } from "@/components/admin/DeleteButton";
 import { formatarDiaMissa, lerDataArmazenada, paraExibicao } from "@/lib/occurrences";
@@ -147,7 +148,7 @@ function ListaPorFuncao({
                   )}
                 </td>
                 <td className="px-4 py-3 text-sm">
-                  <form action={salvar} className="flex items-center gap-2">
+                  <ActionForm action={salvar} successMessage="Atribuição salva." className="flex items-center gap-2">
                     <div className="w-48">
                       <SearchableSelect
                         name="servidorId"
@@ -159,7 +160,7 @@ function ListaPorFuncao({
                     <SubmitButton variant="secondary" className="shrink-0" pendingLabel="Salvando">
                       Salvar
                     </SubmitButton>
-                  </form>
+                  </ActionForm>
                 </td>
                 <td className="px-4 py-3 text-sm">
                   {linha.servidorId ? (
@@ -200,16 +201,16 @@ function ListaTodosAtivos({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3 rounded-xl border border-line bg-surface p-4">
-        <form action={escalarTodos}>
+        <ActionForm action={escalarTodos} successMessage="Todos os ativos escalados.">
           <SubmitButton pendingLabel="Escalando todos">Escalar todos os ativos</SubmitButton>
-        </form>
+        </ActionForm>
         <span className="text-sm text-muted">
           {escalados.length} de {servidores.length} servidores ativos escalados
         </span>
       </div>
 
       {disponiveisParaAdicionar.length > 0 && (
-        <form action={adicionar} className="flex items-center gap-2">
+        <ActionForm action={adicionar} successMessage="Servidor adicionado." className="flex items-center gap-2">
           <div className="w-64">
             <SearchableSelect
               name="servidorId"
@@ -220,7 +221,7 @@ function ListaTodosAtivos({
           <SubmitButton variant="secondary" className="shrink-0" pendingLabel="Adicionando">
             Adicionar
           </SubmitButton>
-        </form>
+        </ActionForm>
       )}
 
       {escalados.length === 0 ? (
@@ -247,7 +248,7 @@ function ListaTodosAtivos({
                       <PresencaSelect action={salvarPresenca} defaultValue={atribuicao.presente} />
                     </td>
                     <td className="px-4 py-3 text-right text-sm">
-                      <DeleteButton action={remover} confirmMessage={`Remover ${nome} desta lista?`} label="Remover" />
+                      <DeleteButton action={remover} confirmMessage={`Remover ${nome} desta lista?`} label="Remover" successMessage="Removido da lista." />
                     </td>
                   </tr>
                 );

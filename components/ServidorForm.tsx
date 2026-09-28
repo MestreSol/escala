@@ -4,6 +4,7 @@ import { useActionState } from "react";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { Input, Label, Select, FieldError } from "@/components/ui/Field";
 import { formatarDiaMissa } from "@/lib/occurrences";
+import { useActionToast } from "@/components/hooks/useActionToast";
 import type { MissaOption, ServidorFormState } from "@/lib/types";
 
 type ServidorFormProps = {
@@ -11,13 +12,16 @@ type ServidorFormProps = {
   missas: MissaOption[];
   defaultValues?: {
     nome: string;
-    idade: number;
+    /** "yyyy-MM-dd", formato esperado pelo <input type="date"> */
+    dataNascimento: string;
     comunidade: string;
     categoria: string;
     missaIds: string[];
   };
   submitLabel: string;
 };
+
+const HOJE = new Date().toISOString().slice(0, 10);
 
 const GRAUS = [
   { value: "COROINHA", label: "Coroinha", descricao: "Início da caminhada no altar." },
@@ -27,6 +31,7 @@ const GRAUS = [
 
 export function ServidorForm({ action, missas, defaultValues, submitLabel }: ServidorFormProps) {
   const [state, formAction, pending] = useActionState(action, {});
+  useActionToast(state, pending, "Servidor salvo.");
   const missaIdsSelecionadas = new Set(defaultValues?.missaIds ?? []);
 
   const comunidades = Array.from(
@@ -45,14 +50,13 @@ export function ServidorForm({ action, missas, defaultValues, submitLabel }: Ser
         </div>
 
         <div>
-          <Label htmlFor="idade">Idade</Label>
+          <Label htmlFor="dataNascimento">Data de nascimento</Label>
           <Input
-            id="idade"
-            name="idade"
-            type="number"
-            min={1}
-            max={120}
-            defaultValue={defaultValues?.idade}
+            id="dataNascimento"
+            name="dataNascimento"
+            type="date"
+            max={HOJE}
+            defaultValue={defaultValues?.dataNascimento}
             required
           />
         </div>

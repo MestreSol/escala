@@ -12,7 +12,11 @@ export default async function InscricaoPage() {
     .from("Missa")
     .select("*")
     .eq("ativo", true)
+    // Só missas semanais sorteadas por preferência: "Todos os coroinhas" não
+    // tem vaga por função, e missas grandes (dataUnica) sorteiam entre todos
+    // ou pela comunidade responsável — nenhuma das duas usa preferência.
     .eq("escalarTodosAtivos", false)
+    .is("dataUnica", null)
     .order("diaSemana", { ascending: true })
     .order("horario", { ascending: true })
     .returns<MissaOption[]>();

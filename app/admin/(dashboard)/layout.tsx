@@ -10,6 +10,7 @@ const NAV_ITEMS = [
   { href: "/admin/servidores", label: "Servidores" },
   { href: "/admin/calendario", label: "Calendário" },
   { href: "/admin/acompanhamento", label: "Acompanhamento" },
+  { href: "/admin/aniversariantes", label: "Aniversariantes" },
 ];
 
 export default async function AdminLayout({ children }: { children: ReactNode }) {

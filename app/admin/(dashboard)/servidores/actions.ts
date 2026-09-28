@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { generateId, nowIso } from "@/lib/db";
 import { servidorSchema } from "@/lib/validations";
 import { setVinculosDoServidor } from "@/lib/servidorVinculo";
+import { enviarFotoServidor } from "@/lib/storage";
 import type { ServidorFormState } from "@/lib/types";
 
 export async function updateServidor(
@@ -15,7 +16,7 @@ export async function updateServidor(
 ): Promise<ServidorFormState> {
   const parsed = servidorSchema.safeParse({
     nome: formData.get("nome"),
-    idade: formData.get("idade"),
+    dataNascimento: formData.get("dataNascimento"),
     comunidade: formData.get("comunidade"),
     categoria: formData.get("categoria"),
     missaIds: formData.getAll("missaIds"),
@@ -66,6 +67,21 @@ export async function saveServidorVinculos(servidorId: string, formData: FormDat
   await setVinculosDoServidor(servidorId, selecionados);
 
   revalidatePath(`/admin/servidores/${servidorId}`);
+}
+
+export async function atualizarFotoServidor(servidorId: string, formData: FormData) {
+  const arquivo = formData.get("foto");
+  if (!(arquivo instanceof File) || arquivo.size === 0) {
+    throw new Error("Selecione uma imagem.");
+  }
+
+  const fotoUrl = await enviarFotoServidor(servidorId, arquivo);
+
+  const { error } = await supabase.from("Servidor").update({ fotoUrl, updatedAt: nowIso() }).eq("id", servidorId);
+  if (error) throw error;
+
+  revalidatePath(`/admin/servidores/${servidorId}`);
+  revalidatePath("/admin/servidores");
 }
 
 export async function deleteServidor(id: string) {

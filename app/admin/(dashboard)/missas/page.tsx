@@ -18,6 +18,7 @@ export default async function MissasPage() {
     .from("Missa")
     .select("*, funcoesRequisito:MissaFuncaoRequisito(*)")
     .eq("ativo", true)
+    .is("dataUnica", null)
     .order("diaSemana", { ascending: true })
     .order("horario", { ascending: true })
     .returns<MissaComRequisitos[]>();
@@ -27,7 +28,12 @@ export default async function MissasPage() {
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-semibold tracking-tight text-fg">Missas</h1>
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight text-fg">Missas</h1>
+          <Link href="/admin/missas/grandes" className="text-sm text-accent hover:text-accent-hover">
+            Ver missas grandes (eventos de data única) →
+          </Link>
+        </div>
         <Link href="/admin/missas/nova" className={buttonClasses()}>
           Nova missa
         </Link>
@@ -61,7 +67,7 @@ export default async function MissasPage() {
             horario: <span className="tabular-nums text-muted">{missa.horario}</span>,
             comunidade: <span className="text-muted">{missa.comunidade}</span>,
             funcoes: missa.escalarTodosAtivos ? (
-              <Badge color="blue">Todos os ativos</Badge>
+              <Badge color="blue">Todos os coroinhas</Badge>
             ) : (
               <span className="tabular-nums text-muted">{missa.funcoesRequisito.filter((r) => r.ativo).length}</span>
             ),

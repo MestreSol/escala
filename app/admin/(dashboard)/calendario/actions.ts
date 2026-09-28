@@ -14,7 +14,13 @@ import {
   combinarDataHorario,
   lerDataArmazenada,
 } from "@/lib/occurrences";
-import { gerarEscala, diaChave, type SlotParaPreencher, type ServidorCandidato } from "@/lib/scheduleGenerator";
+import {
+  gerarEscala,
+  diaChave,
+  type SlotParaPreencher,
+  type ServidorCandidato,
+  type ModoEscalacao,
+} from "@/lib/scheduleGenerator";
 import type {
   EscalaAtribuicaoRow,
   FuncaoRow,
@@ -41,6 +47,8 @@ export async function materializarOcorrencias(periodoInicio: Date, periodoFim: D
   if (missasError) throw missasError;
 
   const linhas = (missas ?? []).flatMap((missa) => {
+    // Semanal: toda ocorrência do dia da semana no período. Data única
+    // ("missa grande"): só aquela data, se cair dentro do período.
     const datas =
       missa.diaSemana !== null
         ? gerarDatasOcorrencia(missa.diaSemana, periodoInicio, periodoFim)
@@ -67,10 +75,17 @@ export async function materializarOcorrencias(periodoInicio: Date, periodoFim: D
 async function montarSlotsEmAberto(periodoInicio: Date, periodoFim: Date) {
   const { data: ocorrencias, error: ocorrenciasError } = await supabase
     .from("MissaOcorrencia")
-    .select("id, missaId, data")
+    .select("id, missaId, data, missa:Missa(escalarTodosAtivos, comunidadeResponsavel, dataUnica)")
     .gte("data", periodoInicio.toISOString())
     .lte("data", periodoFim.toISOString())
-    .returns<{ id: string; missaId: string; data: string }[]>();
+    .returns<
+      {
+        id: string;
+        missaId: string;
+        data: string;
+        missa: { escalarTodosAtivos: boolean; comunidadeResponsavel: string | null; dataUnica: string | null };
+      }[]
+    >();
   if (ocorrenciasError) throw ocorrenciasError;
 
   const { data: requisitos, error: requisitosError } = await supabase
@@ -116,7 +131,20 @@ async function montarSlotsEmAberto(periodoInicio: Date, periodoFim: Date) {
 
   const slots: SlotParaPreencher[] = [];
   for (const ocorrencia of ocorrencias ?? []) {
+    // "Todos os coroinhas": sem vagas por função (lista de presença, ver
+    // escalarTodosAtivos) — o gerador não mexe nessas missas.
+    if (ocorrencia.missa.escalarTodosAtivos) continue;
+
     const reqs = requisitosPorMissa.get(ocorrencia.missaId) ?? [];
+    // Missa de comunidade responsável sorteia só entre aquela comunidade;
+    // missa grande (data única) sorteia entre todos os ativos, porque não
+    // entra na lista de preferências da inscrição; semanal usa a preferência.
+    const modoEscalacao: ModoEscalacao = ocorrencia.missa.comunidadeResponsavel
+      ? "COMUNIDADE"
+      : ocorrencia.missa.dataUnica
+        ? "TODOS_ATIVOS"
+        : "NORMAL";
+
     for (const req of reqs) {
       for (let slotIndex = 1; slotIndex <= req.quantidade; slotIndex++) {
         const chave = `${ocorrencia.id}:${req.funcaoId}:${slotIndex}`;
@@ -129,6 +157,8 @@ async function montarSlotsEmAberto(periodoInicio: Date, periodoFim: Date) {
           grauMinimo: req.funcao.grauMinimo,
           prioridade: req.funcao.prioridade,
           slotIndex,
+          modoEscalacao,
+          comunidadeResponsavel: ocorrencia.missa.comunidadeResponsavel ?? undefined,
         });
       }
     }
@@ -165,6 +195,7 @@ export async function gerarEscalaPeriodo(periodoInicioISO: string, periodoFimISO
   const servidores: ServidorCandidato[] = (servidoresDb ?? []).map((s) => ({
     id: s.id,
     categoria: s.categoria,
+    comunidade: s.comunidade,
     missaIdsPreferidas: new Set(s.preferenciasMissas.map((p) => p.missaId)),
     frequenciaBaixa: servidoresComFrequenciaBaixa.has(s.id),
     diasIndisponiveis: indisponibilidadeMap.get(s.id),

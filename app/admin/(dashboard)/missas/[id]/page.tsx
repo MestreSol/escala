@@ -4,6 +4,7 @@ import { MissaForm } from "@/components/admin/MissaForm";
 import { DeleteButton } from "@/components/admin/DeleteButton";
 import { Input } from "@/components/ui/Field";
 import { SubmitButton } from "@/components/ui/SubmitButton";
+import { ActionForm } from "@/components/ui/ActionForm";
 import { PRIORIDADE_LABEL, GRAU_LABEL } from "@/lib/constants";
 import type { FuncaoRow, MissaFuncaoRequisitoRow, MissaRow } from "@/lib/types";
 import { updateMissa, deleteMissa, saveMissaRequisitos } from "../actions";
@@ -39,8 +40,19 @@ export default async function EditarMissaPage({ params }: { params: Promise<{ id
   return (
     <div className="max-w-2xl space-y-10">
       <div>
-        <h1 className="mb-6 text-2xl font-semibold tracking-tight text-fg">Editar missa</h1>
-        <MissaForm action={updateMissa.bind(null, missa.id)} defaultValues={missa} submitLabel="Salvar alterações" />
+        <h1 className="mb-6 text-2xl font-semibold tracking-tight text-fg">
+          {missa.dataUnica ? "Editar missa grande" : "Editar missa"}
+        </h1>
+        <MissaForm
+          action={updateMissa.bind(null, missa.id)}
+          defaultValues={{
+            ...missa,
+            // Âncora sempre em meia-noite UTC (ver lib/occurrences.ts); os 10
+            // primeiros caracteres já são o "yyyy-MM-dd" do <input type="date">.
+            dataUnica: missa.dataUnica?.slice(0, 10) ?? null,
+          }}
+          submitLabel="Salvar alterações"
+        />
       </div>
 
       <div>
@@ -51,14 +63,13 @@ export default async function EditarMissaPage({ params }: { params: Promise<{ id
 
         {missa.escalarTodosAtivos ? (
           <p className="rounded-md border border-line bg-surface-2 px-4 py-3 text-sm text-muted">
-            Essa missa está marcada como &quot;precisa de todos os servidores ativos&quot; — não usa
-            funções individuais. Na tela de cada ocorrência, escale todo mundo de uma vez com um
-            clique.
+            Essa missa está como &quot;Todos os coroinhas&quot; — não usa funções individuais. Na
+            tela de cada ocorrência, escale todo mundo de uma vez com um clique.
           </p>
         ) : funcoes.length === 0 ? (
           <p className="text-sm text-muted">Cadastre funções primeiro.</p>
         ) : (
-          <form action={salvarRequisitos} className="space-y-3">
+          <ActionForm action={salvarRequisitos} successMessage="Funções da missa salvas." className="space-y-3">
             {funcoes.map((funcao) => {
               const requisito = requisitoPorFuncao.get(funcao.id);
               return (
@@ -90,7 +101,7 @@ export default async function EditarMissaPage({ params }: { params: Promise<{ id
               );
             })}
             <SubmitButton pendingLabel="Salvando">Salvar funções da missa</SubmitButton>
-          </form>
+          </ActionForm>
         )}
       </div>
 

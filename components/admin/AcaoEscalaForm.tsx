@@ -5,6 +5,7 @@ import { useFormStatus } from "react-dom";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { ProgressBar, Spinner } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { executarComToast } from "@/components/ui/ActionForm";
 import { Button, type ButtonVariant } from "@/components/ui/Button";
 
 const MENSAGENS_PADRAO = [
@@ -25,6 +26,7 @@ export function AcaoEscalaForm({
   variant = "primary",
   confirmMessage,
   pendingTitle,
+  successMessage,
   mensagens = MENSAGENS_PADRAO,
 }: {
   action: () => Promise<void>;
@@ -32,12 +34,14 @@ export function AcaoEscalaForm({
   variant?: ButtonVariant;
   confirmMessage?: string;
   pendingTitle: string;
+  /** Toast mostrado quando a ação termina bem. */
+  successMessage: string;
   mensagens?: string[];
 }) {
   const [confirmando, setConfirmando] = useState(false);
 
   return (
-    <form action={action}>
+    <form action={() => executarComToast(action, successMessage)}>
       {confirmMessage ? (
         <>
           <BotaoAbrirConfirmacao variant={variant} onClick={() => setConfirmando(true)}>

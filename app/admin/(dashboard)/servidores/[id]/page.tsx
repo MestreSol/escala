@@ -2,9 +2,10 @@ import { notFound } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { ServidorForm } from "@/components/ServidorForm";
 import { SubmitButton } from "@/components/ui/SubmitButton";
+import { ActionForm } from "@/components/ui/ActionForm";
 import { getVinculosDoServidor } from "@/lib/servidorVinculo";
 import type { MissaOption, ServidorMissaPreferenciaRow, ServidorRow } from "@/lib/types";
-import { updateServidor, saveServidorVinculos } from "../actions";
+import { updateServidor, saveServidorVinculos, atualizarFotoServidor } from "../actions";
 
 // Página lê dados do banco a cada acesso — nunca deve ser congelada em build.
 export const dynamic = "force-dynamic";
@@ -23,7 +24,9 @@ export default async function EditarServidorPage({ params }: { params: Promise<{
       .from("Missa")
       .select("*")
       .eq("ativo", true)
+      // Mesmo filtro da inscrição: só semanais sorteadas por preferência.
       .eq("escalarTodosAtivos", false)
+      .is("dataUnica", null)
       .order("diaSemana", { ascending: true })
       .order("horario", { ascending: true })
       .returns<MissaOption[]>(),
@@ -59,10 +62,43 @@ export default async function EditarServidorPage({ params }: { params: Promise<{
           missas={missas}
           defaultValues={{
             ...servidor,
+            // A âncora vem sempre em meia-noite UTC (ver lib/occurrences.ts);
+            // os 10 primeiros caracteres já são o "yyyy-MM-dd" esperado pelo
+            // <input type="date">, sem risco de deslocar de dia.
+            dataNascimento: servidor.dataNascimento?.slice(0, 10) ?? "",
             missaIds: servidor.preferenciasMissas.map((p) => p.missaId),
           }}
           submitLabel="Salvar alterações"
         />
+      </div>
+
+      <div>
+        <h2 className="mb-1 text-lg font-semibold text-fg">Foto</h2>
+        <p className="mb-4 text-sm text-muted">Usada para identificação do servidor (ex: crachá, acompanhamento).</p>
+        <ActionForm
+          action={atualizarFotoServidor.bind(null, servidor.id)}
+          successMessage="Foto atualizada."
+          className="flex items-center gap-6 rounded-xl border border-line bg-surface p-6"
+        >
+          {servidor.fotoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element -- URL externa (Supabase Storage), não dá pra usar next/image sem configurar o domínio.
+            <img src={servidor.fotoUrl} alt={servidor.nome} className="size-24 shrink-0 rounded-xl object-cover" />
+          ) : (
+            <div className="flex size-24 shrink-0 items-center justify-center rounded-xl bg-surface-2 text-xs text-subtle">
+              Sem foto
+            </div>
+          )}
+          <div className="flex-1 space-y-3">
+            <input
+              type="file"
+              name="foto"
+              accept="image/jpeg,image/png,image/webp"
+              required
+              className="block w-full text-sm text-muted file:mr-3 file:rounded-md file:border file:border-line file:bg-surface-2 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-fg hover:file:bg-line"
+            />
+            <SubmitButton pendingLabel="Enviando">Salvar foto</SubmitButton>
+          </div>
+        </ActionForm>
       </div>
 
       <div>
@@ -76,7 +112,11 @@ export default async function EditarServidorPage({ params }: { params: Promise<{
         {outrosServidores.length === 0 ? (
           <p className="text-sm text-muted">Cadastre outros servidores para configurar vínculos.</p>
         ) : (
-          <form action={salvarVinculos} className="space-y-3 rounded-xl border border-line bg-surface p-6 ">
+          <ActionForm
+            action={salvarVinculos}
+            successMessage="Vínculos salvos."
+            className="space-y-3 rounded-xl border border-line bg-surface p-6"
+          >
             <div className="max-h-72 space-y-2 overflow-y-auto">
               {outrosServidores.map((outro) => (
                 <label
@@ -94,7 +134,7 @@ export default async function EditarServidorPage({ params }: { params: Promise<{
               ))}
             </div>
             <SubmitButton pendingLabel="Salvando">Salvar vínculos</SubmitButton>
-          </form>
+          </ActionForm>
         )}
       </div>
     </div>

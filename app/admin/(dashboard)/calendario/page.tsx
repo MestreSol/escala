@@ -17,6 +17,7 @@ import { AcaoEscalaForm } from "@/components/admin/AcaoEscalaForm";
 import { periodoDoMes, paraExibicao, lerDataArmazenada } from "@/lib/occurrences";
 import type { EscalaAtribuicaoRow, MissaFuncaoRequisitoRow, MissaRow, MissaOcorrenciaRow } from "@/lib/types";
 import { SubmitButton } from "@/components/ui/SubmitButton";
+import { ActionForm } from "@/components/ui/ActionForm";
 import { mesEstaPublicado } from "@/lib/escalaPublicada";
 import {
   materializarOcorrencias,
@@ -113,6 +114,7 @@ export default async function CalendarioPage({
           <AcaoEscalaForm
             action={gerarEscalaPeriodo.bind(null, periodoInicioISO, periodoFimISO)}
             pendingTitle="Gerando escala"
+            successMessage="Escala gerada."
           >
             Gerar escala
           </AcaoEscalaForm>
@@ -123,6 +125,7 @@ export default async function CalendarioPage({
             action={regenerarEscalaPeriodo.bind(null, periodoInicioISO, periodoFimISO)}
             variant="ghost"
             pendingTitle="Regenerando escala"
+            successMessage="Escala regenerada."
             confirmMessage="Isso apaga todas as atribuições geradas automaticamente neste mês e sorteia tudo de novo. Continuar?"
           >
             Regenerar tudo
@@ -131,6 +134,7 @@ export default async function CalendarioPage({
             action={apagarEscalaPeriodo.bind(null, periodoInicioISO, periodoFimISO)}
             variant="danger"
             pendingTitle="Apagando escala do mês"
+            successMessage="Escala do mês apagada."
             mensagens={["Removendo atribuições", "Liberando as vagas"]}
             confirmMessage="Isso apaga TODAS as atribuições deste mês, incluindo as editadas manualmente, sem gerar outras no lugar. Use quando 'Gerar escala' não estiver preenchendo mais nada. Continuar?"
           >
@@ -161,14 +165,17 @@ export default async function CalendarioPage({
             <span className="text-muted">Rascunho — os servidores ainda não veem a escala deste mês.</span>
           )}
         </div>
-        <form action={(publicado ? despublicarEscalaMes : publicarEscalaMes).bind(null, mesAtualParam)}>
+        <ActionForm
+          action={(publicado ? despublicarEscalaMes : publicarEscalaMes).bind(null, mesAtualParam)}
+          successMessage={publicado ? "Escala despublicada." : "Escala publicada para os servidores."}
+        >
           <SubmitButton
             variant={publicado ? "ghost" : "primary"}
             pendingLabel={publicado ? "Despublicando" : "Publicando"}
           >
             {publicado ? "Despublicar" : "Publicar para os servidores"}
           </SubmitButton>
-        </form>
+        </ActionForm>
       </div>
 
       <div className="overflow-x-auto">
