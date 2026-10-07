@@ -1,16 +1,19 @@
 "use server";
 
-import { exigirUsuario } from "@/lib/sessao";
+import { exigirPastoral, exigirPastoralParaPresenca, type UsuarioAtual } from "@/lib/sessao";
+import { garantirDaParoquia, garantirDaPastoral } from "@/lib/paroquia";
+import { CONFIG_PADRAO, getConfigMissasMap } from "@/lib/missaPastoral";
 import { revalidatePath } from "next/cache";
 import { supabase } from "@/lib/supabase";
 import { generateId, nowIso } from "@/lib/db";
 import { getAcumulacoesMap } from "@/lib/funcaoAcumulacao";
 import { getVinculosMap } from "@/lib/servidorVinculo";
+import { getParesDeFuncoes } from "@/lib/funcaoPar";
 import { getServidoresComFrequenciaBaixa } from "@/lib/frequencia";
 import { getIndisponibilidadeMap } from "@/lib/servidorIndisponibilidade";
 import { publicarMes, despublicarMes } from "@/lib/escalaPublicada";
 import { materializarOcorrencias } from "@/lib/materializarOcorrencias";
-import { lerDataArmazenada } from "@/lib/occurrences";
+import { intervaloDeHojeNaParoquia, lerDataArmazenada } from "@/lib/occurrences";
 import {
   gerarEscala,
   diaChave,
@@ -34,27 +37,29 @@ type AtribuicaoExistente = {
   data: Date;
 };
 
-async function montarSlotsEmAberto(periodoInicio: Date, periodoFim: Date) {
+/**
+ * Vagas da pastoral ainda sem atribuição no período. As ocorrências são da
+ * paróquia (compartilhadas); as vagas vêm só das funções da pastoral.
+ */
+async function montarSlotsEmAberto(paroquiaId: string, pastoralId: string, periodoInicio: Date, periodoFim: Date) {
   const { data: ocorrencias, error: ocorrenciasError } = await supabase
     .from("MissaOcorrencia")
-    .select("id, missaId, data, missa:Missa(escalarTodosAtivos, comunidadeResponsavel, dataUnica)")
+    .select("id, missaId, data, missa:Missa(dataUnica)")
+    .eq("paroquiaId", paroquiaId)
     .gte("data", periodoInicio.toISOString())
     .lte("data", periodoFim.toISOString())
-    .returns<
-      {
-        id: string;
-        missaId: string;
-        data: string;
-        missa: { escalarTodosAtivos: boolean; comunidadeResponsavel: string | null; dataUnica: string | null };
-      }[]
-    >();
+    .returns<{ id: string; missaId: string; data: string; missa: { dataUnica: string | null } }[]>();
   if (ocorrenciasError) throw ocorrenciasError;
 
-  const { data: requisitos, error: requisitosError } = await supabase
-    .from("MissaFuncaoRequisito")
-    .select("*, funcao:Funcao(*)")
-    .eq("ativo", true)
-    .returns<(MissaFuncaoRequisitoRow & { funcao: FuncaoRow })[]>();
+  const [{ data: requisitos, error: requisitosError }, configs] = await Promise.all([
+    supabase
+      .from("MissaFuncaoRequisito")
+      .select("*, funcao:Funcao!inner(*)")
+      .eq("funcao.pastoralId", pastoralId)
+      .eq("ativo", true)
+      .returns<(MissaFuncaoRequisitoRow & { funcao: FuncaoRow })[]>(),
+    getConfigMissasMap(pastoralId),
+  ]);
   if (requisitosError) throw requisitosError;
 
   const requisitosPorMissa = new Map<string, (MissaFuncaoRequisitoRow & { funcao: FuncaoRow })[]>();
@@ -71,6 +76,7 @@ async function montarSlotsEmAberto(periodoInicio: Date, periodoFim: Date) {
       .from("EscalaAtribuicao")
       .select("*, ocorrencia:MissaOcorrencia(data)")
       .in("ocorrenciaId", ocorrenciaIds)
+      .eq("pastoralId", pastoralId)
       .returns<(EscalaAtribuicaoRow & { ocorrencia: { data: string } })[]>();
     if (error) throw error;
     atribuicoesExistentes = (data ?? [])
@@ -90,10 +96,11 @@ async function montarSlotsEmAberto(periodoInicio: Date, periodoFim: Date) {
 
   const slots: SlotParaPreencher[] = [];
   for (const ocorrencia of ocorrencias ?? []) {
-    if (ocorrencia.missa.escalarTodosAtivos) continue;
+    const config = configs.get(ocorrencia.missaId) ?? CONFIG_PADRAO;
+    if (config.escalarTodosAtivos) continue;
 
     const reqs = requisitosPorMissa.get(ocorrencia.missaId) ?? [];
-    const modoEscalacao: ModoEscalacao = ocorrencia.missa.comunidadeResponsavel
+    const modoEscalacao: ModoEscalacao = config.comunidadeResponsavel
       ? "COMUNIDADE"
       : ocorrencia.missa.dataUnica
         ? "TODOS_ATIVOS"
@@ -112,7 +119,7 @@ async function montarSlotsEmAberto(periodoInicio: Date, periodoFim: Date) {
           prioridade: req.funcao.prioridade,
           slotIndex,
           modoEscalacao,
-          comunidadeResponsavel: ocorrencia.missa.comunidadeResponsavel ?? undefined,
+          comunidadeResponsavel: config.comunidadeResponsavel ?? undefined,
         });
       }
     }
@@ -122,13 +129,13 @@ async function montarSlotsEmAberto(periodoInicio: Date, periodoFim: Date) {
 }
 
 export async function gerarEscalaPeriodo(periodoInicioISO: string, periodoFimISO: string) {
-  await exigirUsuario();
+  const { paroquiaId, pastoralId } = await exigirPastoral();
   const periodoInicio = new Date(periodoInicioISO);
   const periodoFim = new Date(periodoFimISO);
 
-  await materializarOcorrencias(periodoInicio, periodoFim);
+  await materializarOcorrencias(paroquiaId, periodoInicio, periodoFim);
 
-  const { slots, atribuicoesExistentes } = await montarSlotsEmAberto(periodoInicio, periodoFim);
+  const { slots, atribuicoesExistentes } = await montarSlotsEmAberto(paroquiaId, pastoralId, periodoInicio, periodoFim);
 
   if (slots.length === 0) {
     revalidatePath("/admin/calendario");
@@ -138,13 +145,14 @@ export async function gerarEscalaPeriodo(periodoInicioISO: string, periodoFimISO
   const { data: servidoresDb, error: servidoresError } = await supabase
     .from("Servidor")
     .select("*, preferenciasMissas:ServidorMissaPreferencia(*)")
+    .eq("pastoralId", pastoralId)
     .eq("ativo", true)
     .returns<(ServidorRow & { preferenciasMissas: ServidorMissaPreferenciaRow[] })[]>();
   if (servidoresError) throw servidoresError;
 
   const [servidoresComFrequenciaBaixa, indisponibilidadeMap] = await Promise.all([
-    getServidoresComFrequenciaBaixa(),
-    getIndisponibilidadeMap(),
+    getServidoresComFrequenciaBaixa(pastoralId),
+    getIndisponibilidadeMap(pastoralId),
   ]);
 
   const servidores: ServidorCandidato[] = (servidoresDb ?? []).map((s) => ({
@@ -154,6 +162,7 @@ export async function gerarEscalaPeriodo(periodoInicioISO: string, periodoFimISO
     missaIdsPreferidas: new Set(s.preferenciasMissas.map((p) => p.missaId)),
     frequenciaBaixa: servidoresComFrequenciaBaixa.has(s.id),
     diasIndisponiveis: indisponibilidadeMap.get(s.id),
+    experiente: s.experiente,
   }));
 
   const contagemInicial: Record<string, number> = {};
@@ -163,12 +172,14 @@ export async function gerarEscalaPeriodo(periodoInicioISO: string, periodoFimISO
     }
   }
 
-  const acumulacoes = await getAcumulacoesMap();
-  const vinculos = await getVinculosMap();
+  const acumulacoes = await getAcumulacoesMap(pastoralId);
+  const vinculos = await getVinculosMap(pastoralId);
+  const paresDeFuncoes = await getParesDeFuncoes(pastoralId);
 
   const { data: funcoesAtomicasDb, error: atomicasError } = await supabase
     .from("Funcao")
     .select("id")
+    .eq("pastoralId", pastoralId)
     .eq("exigeGrupoCompleto", true)
     .returns<{ id: string }[]>();
   if (atomicasError) throw atomicasError;
@@ -180,11 +191,14 @@ export async function gerarEscalaPeriodo(periodoInicioISO: string, periodoFimISO
     funcoesAtomicas,
     atribuicoesExistentes,
     vinculos,
+    paresDeFuncoes,
   });
 
   const escalaId = generateId();
   const { error: escalaError } = await supabase.from("Escala").insert({
     id: escalaId,
+    paroquiaId,
+    pastoralId,
     periodoInicio: periodoInicio.toISOString(),
     periodoFim: periodoFim.toISOString(),
   });
@@ -194,6 +208,7 @@ export async function gerarEscalaPeriodo(periodoInicioISO: string, periodoFimISO
 
   const rows = resultado.map((r) => ({
     id: generateId(),
+    pastoralId,
     escalaId,
     ocorrenciaId: r.ocorrenciaId,
     funcaoId: r.funcaoId,
@@ -257,11 +272,14 @@ export async function atualizarAtribuicaoManual(
   slotIndex: number,
   formData: FormData
 ) {
-  await exigirUsuario();
+  const { paroquiaId, pastoralId } = await exigirPastoral();
   const servidorId = String(formData.get("servidorId") ?? "").trim() || null;
+  await garantirDaParoquia("MissaOcorrencia", ocorrenciaId, paroquiaId);
+  await garantirDaPastoral("Funcao", funcaoId, pastoralId);
 
   let servidorNomeSnapshot: string | null = null;
   if (servidorId) {
+    await garantirDaPastoral("Servidor", servidorId, pastoralId);
     const { data: servidor, error } = await supabase
       .from("Servidor")
       .select("nome")
@@ -287,6 +305,7 @@ export async function atualizarAtribuicaoManual(
   const { error } = await supabase.from("EscalaAtribuicao").upsert(
     {
       id: existente?.id ?? generateId(),
+      pastoralId,
       ocorrenciaId,
       funcaoId,
       slotIndex,
@@ -303,19 +322,41 @@ export async function atualizarAtribuicaoManual(
   revalidatePath("/admin/calendario");
 }
 
+/**
+ * Confere que a ocorrência é da paróquia e — para o PRESENCA, que só cuida
+ * das missas do dia — que ela é de hoje.
+ */
+async function garantirOcorrenciaParaPresenca(usuario: UsuarioAtual, ocorrenciaId: string, paroquiaId: string) {
+  await garantirDaParoquia("MissaOcorrencia", ocorrenciaId, paroquiaId);
+  if (usuario.papel !== "PRESENCA") return;
+
+  const { inicio, fim } = intervaloDeHojeNaParoquia();
+  const { data, error } = await supabase
+    .from("MissaOcorrencia")
+    .select("id")
+    .eq("id", ocorrenciaId)
+    .gte("data", inicio.toISOString())
+    .lte("data", fim.toISOString())
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw new Error("Você só pode registrar presença nas missas de hoje.");
+}
+
 export async function registrarPresenca(
   ocorrenciaId: string,
   funcaoId: string,
   slotIndex: number,
   formData: FormData
 ) {
-  await exigirUsuario();
+  const { usuario, paroquiaId, pastoralId } = await exigirPastoralParaPresenca();
+  await garantirOcorrenciaParaPresenca(usuario, ocorrenciaId, paroquiaId);
   const valor = String(formData.get("presente") ?? "");
   const presente = valor === "" ? null : valor === "true";
 
   const { error } = await supabase
     .from("EscalaAtribuicao")
     .update({ presente, updatedAt: nowIso() })
+    .eq("pastoralId", pastoralId)
     .eq("ocorrenciaId", ocorrenciaId)
     .eq("funcaoId", funcaoId)
     .eq("slotIndex", slotIndex);
@@ -323,16 +364,24 @@ export async function registrarPresenca(
 
   revalidatePath(`/admin/calendario/${ocorrenciaId}`);
   revalidatePath("/admin/acompanhamento");
+  revalidatePath("/admin/presenca");
 }
 
 export async function escalarTodosAtivos(ocorrenciaId: string) {
-  await exigirUsuario();
+  const { paroquiaId, pastoralId } = await exigirPastoral();
+  await garantirDaParoquia("MissaOcorrencia", ocorrenciaId, paroquiaId);
   const [{ data: servidores, error: servidoresError }, { data: existentes, error: existentesError }] =
     await Promise.all([
-      supabase.from("Servidor").select("id, nome").eq("ativo", true).returns<{ id: string; nome: string }[]>(),
+      supabase
+        .from("Servidor")
+        .select("id, nome")
+        .eq("pastoralId", pastoralId)
+        .eq("ativo", true)
+        .returns<{ id: string; nome: string }[]>(),
       supabase
         .from("EscalaAtribuicao")
         .select("servidorId, slotIndex")
+        .eq("pastoralId", pastoralId)
         .eq("ocorrenciaId", ocorrenciaId)
         .is("funcaoId", null)
         .returns<{ servidorId: string | null; slotIndex: number }[]>(),
@@ -347,6 +396,7 @@ export async function escalarTodosAtivos(ocorrenciaId: string) {
     .filter((s) => !jaEscalados.has(s.id))
     .map((s) => ({
       id: generateId(),
+      pastoralId,
       ocorrenciaId,
       funcaoId: null,
       slotIndex: proximoSlot++,
@@ -365,9 +415,11 @@ export async function escalarTodosAtivos(ocorrenciaId: string) {
 }
 
 export async function adicionarNaListaTodosAtivos(ocorrenciaId: string, formData: FormData) {
-  await exigirUsuario();
+  const { paroquiaId, pastoralId } = await exigirPastoral();
   const servidorId = String(formData.get("servidorId") ?? "").trim();
   if (!servidorId) return;
+  await garantirDaParoquia("MissaOcorrencia", ocorrenciaId, paroquiaId);
+  await garantirDaPastoral("Servidor", servidorId, pastoralId);
 
   const { data: servidor, error: servidorError } = await supabase
     .from("Servidor")
@@ -380,6 +432,7 @@ export async function adicionarNaListaTodosAtivos(ocorrenciaId: string, formData
   const { data: existentes, error: existentesError } = await supabase
     .from("EscalaAtribuicao")
     .select("slotIndex")
+    .eq("pastoralId", pastoralId)
     .eq("ocorrenciaId", ocorrenciaId)
     .is("funcaoId", null)
     .returns<{ slotIndex: number }[]>();
@@ -389,6 +442,7 @@ export async function adicionarNaListaTodosAtivos(ocorrenciaId: string, formData
 
   const { error } = await supabase.from("EscalaAtribuicao").insert({
     id: generateId(),
+    pastoralId,
     ocorrenciaId,
     funcaoId: null,
     slotIndex: proximoSlot,
@@ -403,38 +457,49 @@ export async function adicionarNaListaTodosAtivos(ocorrenciaId: string, formData
 }
 
 export async function removerDaListaTodosAtivos(ocorrenciaId: string, atribuicaoId: string) {
-  await exigirUsuario();
-  const { error } = await supabase.from("EscalaAtribuicao").delete().eq("id", atribuicaoId);
+  const { paroquiaId, pastoralId } = await exigirPastoral();
+  await garantirDaParoquia("MissaOcorrencia", ocorrenciaId, paroquiaId);
+  const { error } = await supabase
+    .from("EscalaAtribuicao")
+    .delete()
+    .eq("id", atribuicaoId)
+    .eq("pastoralId", pastoralId)
+    .eq("ocorrenciaId", ocorrenciaId);
   if (error) throw error;
 
   revalidatePath(`/admin/calendario/${ocorrenciaId}`);
 }
 
 export async function registrarPresencaTodosAtivos(ocorrenciaId: string, atribuicaoId: string, formData: FormData) {
-  await exigirUsuario();
+  const { usuario, paroquiaId, pastoralId } = await exigirPastoralParaPresenca();
+  await garantirOcorrenciaParaPresenca(usuario, ocorrenciaId, paroquiaId);
   const valor = String(formData.get("presente") ?? "");
   const presente = valor === "" ? null : valor === "true";
 
   const { error } = await supabase
     .from("EscalaAtribuicao")
     .update({ presente, updatedAt: nowIso() })
-    .eq("id", atribuicaoId);
+    .eq("id", atribuicaoId)
+    .eq("pastoralId", pastoralId)
+    .eq("ocorrenciaId", ocorrenciaId);
   if (error) throw error;
 
   revalidatePath(`/admin/calendario/${ocorrenciaId}`);
   revalidatePath("/admin/acompanhamento");
+  revalidatePath("/admin/presenca");
 }
 
 export async function regenerarEscalaPeriodo(periodoInicioISO: string, periodoFimISO: string) {
-  await exigirUsuario();
+  const { paroquiaId, pastoralId } = await exigirPastoral();
   const periodoInicio = new Date(periodoInicioISO);
   const periodoFim = new Date(periodoFimISO);
 
-  await materializarOcorrencias(periodoInicio, periodoFim);
+  await materializarOcorrencias(paroquiaId, periodoInicio, periodoFim);
 
   const { data: ocorrencias, error } = await supabase
     .from("MissaOcorrencia")
     .select("id")
+    .eq("paroquiaId", paroquiaId)
     .gte("data", periodoInicio.toISOString())
     .lte("data", periodoFim.toISOString())
     .returns<{ id: string }[]>();
@@ -446,6 +511,7 @@ export async function regenerarEscalaPeriodo(periodoInicioISO: string, periodoFi
       .from("EscalaAtribuicao")
       .delete()
       .in("ocorrenciaId", ocorrenciaIds)
+      .eq("pastoralId", pastoralId)
       .eq("geradoAutomaticamente", true);
     if (deleteError) throw deleteError;
   }
@@ -454,13 +520,14 @@ export async function regenerarEscalaPeriodo(periodoInicioISO: string, periodoFi
 }
 
 export async function apagarEscalaPeriodo(periodoInicioISO: string, periodoFimISO: string) {
-  await exigirUsuario();
+  const { paroquiaId, pastoralId } = await exigirPastoral();
   const periodoInicio = new Date(periodoInicioISO);
   const periodoFim = new Date(periodoFimISO);
 
   const { data: ocorrencias, error } = await supabase
     .from("MissaOcorrencia")
     .select("id")
+    .eq("paroquiaId", paroquiaId)
     .gte("data", periodoInicio.toISOString())
     .lte("data", periodoFim.toISOString())
     .returns<{ id: string }[]>();
@@ -468,7 +535,11 @@ export async function apagarEscalaPeriodo(periodoInicioISO: string, periodoFimIS
 
   const ocorrenciaIds = (ocorrencias ?? []).map((o) => o.id);
   if (ocorrenciaIds.length > 0) {
-    const { error: deleteError } = await supabase.from("EscalaAtribuicao").delete().in("ocorrenciaId", ocorrenciaIds);
+    const { error: deleteError } = await supabase
+      .from("EscalaAtribuicao")
+      .delete()
+      .in("ocorrenciaId", ocorrenciaIds)
+      .eq("pastoralId", pastoralId);
     if (deleteError) throw deleteError;
   }
 
@@ -476,15 +547,15 @@ export async function apagarEscalaPeriodo(periodoInicioISO: string, periodoFimIS
 }
 
 export async function publicarEscalaMes(mes: string) {
-  await exigirUsuario();
-  await publicarMes(mes);
+  const { paroquiaId, pastoralId } = await exigirPastoral();
+  await publicarMes(paroquiaId, pastoralId, mes);
   revalidatePath("/admin/calendario");
-  revalidatePath("/escala");
+  revalidatePath("/[paroquia]/[pastoral]/escala", "page");
 }
 
 export async function despublicarEscalaMes(mes: string) {
-  await exigirUsuario();
-  await despublicarMes(mes);
+  const { pastoralId } = await exigirPastoral();
+  await despublicarMes(pastoralId, mes);
   revalidatePath("/admin/calendario");
-  revalidatePath("/escala");
+  revalidatePath("/[paroquia]/[pastoral]/escala", "page");
 }

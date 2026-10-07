@@ -17,9 +17,22 @@ export async function getFuncoesQueAssumem(funcaoId: string): Promise<string[]> 
   return (data ?? []).map((row) => row.B as string);
 }
 
-/** Para várias funções-alvo de uma vez: mapa funcaoId -> lista de funções-base que podem assumi-la. */
-export async function getAcumulacoesMap(): Promise<Map<string, string[]>> {
-  const { data, error } = await supabase.from(TABELA).select("A, B");
+/**
+ * Para várias funções-alvo de uma vez: mapa funcaoId -> lista de funções-base
+ * que podem assumi-la. A tabela de junção não tem pastoralId — filtra pelas
+ * funções da pastoral (poucas, cabem no `in`).
+ */
+export async function getAcumulacoesMap(pastoralId: string): Promise<Map<string, string[]>> {
+  const { data: funcoes, error: funcoesError } = await supabase
+    .from("Funcao")
+    .select("id")
+    .eq("pastoralId", pastoralId)
+    .returns<{ id: string }[]>();
+  if (funcoesError) throw funcoesError;
+  const funcaoIds = (funcoes ?? []).map((f) => f.id);
+  if (funcaoIds.length === 0) return new Map();
+
+  const { data, error } = await supabase.from(TABELA).select("A, B").in("B", funcaoIds);
   if (error) throw error;
   const mapa = new Map<string, string[]>();
   for (const row of data ?? []) {

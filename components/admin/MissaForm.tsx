@@ -27,21 +27,22 @@ type MissaFormProps = {
   /** Tipo pré-selecionado ao abrir o form (ex: vindo de "Nova missa grande"). Padrão: RECORRENTE. */
   tipoInicial?: Tipo;
   submitLabel: string;
+  /** Pastoral de quem está editando: o "Quem serve" vale só para ela (a missa é da paróquia toda). */
+  pastoral: { nome: string; rotuloTodos: string };
 };
 
-const MODOS_POR_PREFERENCIA: { valor: ModoMissa; titulo: string; descricao: string }[] = [
-  { valor: "NORMAL", titulo: "Normal", descricao: "Sorteio entre quem marcou esta missa como preferida." },
-  {
-    valor: "LISTA_TODOS",
-    titulo: "Todos os coroinhas",
-    descricao: "Sem funções: todo ativo entra numa lista de presença.",
-  },
-];
+type Modo = { valor: ModoMissa; titulo: string; descricao: string };
 
-const MODOS: Record<Tipo, { valor: ModoMissa; titulo: string; descricao: string }[]> = {
-  RECORRENTE: MODOS_POR_PREFERENCIA,
-  MENSAL: MODOS_POR_PREFERENCIA,
-  DATA_UNICA: [
+function modosDoTipo(tipo: Tipo, rotuloTodos: string): Modo[] {
+  const listaTodos: Modo = {
+    valor: "LISTA_TODOS",
+    titulo: rotuloTodos,
+    descricao: "Sem funções: todo ativo entra numa lista de presença.",
+  };
+  if (tipo !== "DATA_UNICA") {
+    return [{ valor: "NORMAL", titulo: "Normal", descricao: "Sorteio entre quem marcou esta missa como preferida." }, listaTodos];
+  }
+  return [
     {
       valor: "TODOS_ATIVOS",
       titulo: "Sorteio entre todos",
@@ -52,13 +53,9 @@ const MODOS: Record<Tipo, { valor: ModoMissa; titulo: string; descricao: string 
       titulo: "Comunidade responsável",
       descricao: "Funções sorteadas só entre os servidores de uma comunidade.",
     },
-    {
-      valor: "LISTA_TODOS",
-      titulo: "Todos os coroinhas",
-      descricao: "Sem funções: todo ativo entra numa lista de presença.",
-    },
-  ],
-};
+    listaTodos,
+  ];
+}
 
 const HOJE = new Date().toISOString().slice(0, 10);
 
@@ -71,18 +68,20 @@ function modoInicial(tipo: Tipo, valores: MissaFormProps["defaultValues"]): Modo
   return "NORMAL";
 }
 
-export function MissaForm({ action, defaultValues, tipoInicial, submitLabel }: MissaFormProps) {
+export function MissaForm({ action, defaultValues, tipoInicial, submitLabel, pastoral }: MissaFormProps) {
   const [state, formAction, pending] = useActionState(action, {});
   useActionToast(state, pending, "Missa salva.");
   const [tipo, setTipo] = useState<Tipo>(
     defaultValues?.dataUnica ? "DATA_UNICA" : defaultValues?.semanaDoMes ? "MENSAL" : (tipoInicial ?? "RECORRENTE")
   );
   const [modo, setModo] = useState<ModoMissa>(() => modoInicial(tipo, defaultValues));
+  const modos = modosDoTipo(tipo, pastoral.rotuloTodos);
 
   function trocarTipo(novo: Tipo) {
     setTipo(novo);
     // O modo atual pode não existir no outro tipo (ex: "Sorteio entre todos" é só de data única).
-    if (!MODOS[novo].some((m) => m.valor === modo)) setModo(MODOS[novo][0].valor);
+    const modosNovos = modosDoTipo(novo, pastoral.rotuloTodos);
+    if (!modosNovos.some((m) => m.valor === modo)) setModo(modosNovos[0].valor);
   }
 
   return (
@@ -193,9 +192,12 @@ export function MissaForm({ action, defaultValues, tipoInicial, submitLabel }: M
       </div>
 
       <div>
-        <Label>Quem serve</Label>
+        <Label>Quem serve — {pastoral.nome}</Label>
+        <p className="mb-2 -mt-1 text-xs text-muted">
+          Vale só para a sua pastoral. Dia, horário e comunidade são os mesmos para todas as pastorais da paróquia.
+        </p>
         <div className="space-y-2">
-          {MODOS[tipo].map((opcao) => (
+          {modos.map((opcao) => (
             <label key={opcao.valor} className={cartaoClasses}>
               <input
                 type="radio"

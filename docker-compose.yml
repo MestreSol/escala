@@ -1,0 +1,30 @@
+# Uso:
+#   docker compose up -d --build        sobe o app em http://localhost:3000
+#   docker compose run --rm migrate     aplica migrations pendentes (prisma migrate deploy)
+#
+# As variáveis vêm do .env (DATABASE_URL, SUPABASE_URL,
+# SUPABASE_SERVICE_ROLE_KEY, SESSION_SECRET — ver .env.example).
+#
+# ATENÇÃO: o DATABASE_URL do .env é o banco de PRODUÇÃO. O serviço `migrate`
+# fica atrás de um profile pra nunca rodar sozinho no `up`; ele só aplica
+# migrations novas (nunca reseta nem apaga dados). Nunca use `migrate dev`,
+# `migrate reset` ou `db push` contra esse banco.
+
+services:
+  app:
+    build:
+      context: .
+      target: runner
+    image: escala-app
+    env_file: .env
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+
+  migrate:
+    build:
+      context: .
+      target: migrator
+    image: escala-migrate
+    env_file: .env
+    profiles: ["migrate"]

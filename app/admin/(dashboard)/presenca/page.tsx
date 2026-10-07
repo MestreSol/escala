@@ -1,0 +1,92 @@
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
+import { supabase } from "@/lib/supabase";
+import { pastoralDaPresenca } from "@/lib/sessao";
+import { PresencaSelect } from "@/components/admin/PresencaSelect";
+import { intervaloDeHojeNaParoquia, lerDataArmazenada, paraExibicao } from "@/lib/occurrences";
+import type { EscalaAtribuicaoRow, FuncaoRow, MissaOcorrenciaRow, MissaRow, ServidorRow } from "@/lib/types";
+import { registrarPresencaTodosAtivos } from "../calendario/actions";
+
+export const dynamic = "force-dynamic";
+
+type OcorrenciaDoDia = MissaOcorrenciaRow & {
+  missa: Pick<MissaRow, "horario" | "comunidade">;
+  atribuicoes: (EscalaAtribuicaoRow & {
+    servidor: Pick<ServidorRow, "nome"> | null;
+    funcao: Pick<FuncaoRow, "nome"> | null;
+  })[];
+};
+
+export default async function PresencaDoDiaPage() {
+  const { paroquia, pastoral } = await pastoralDaPresenca();
+  const { inicio, fim } = intervaloDeHojeNaParoquia();
+
+  const { data, error } = await supabase
+    .from("MissaOcorrencia")
+    .select("*, missa:Missa(horario, comunidade), atribuicoes:EscalaAtribuicao(*, servidor:Servidor(nome), funcao:Funcao(nome))")
+    .eq("paroquiaId", paroquia.id)
+    .gte("data", inicio.toISOString())
+    .lte("data", fim.toISOString())
+    .order("data", { ascending: true })
+    .returns<OcorrenciaDoDia[]>();
+  if (error) throw error;
+
+  // A ocorrência é da paróquia; aqui só entram as atribuições desta pastoral com alguém escalado.
+  const ocorrencias = (data ?? [])
+    .map((ocorrencia) => ({
+      ...ocorrencia,
+      atribuicoes: ocorrencia.atribuicoes
+        .filter((a) => a.pastoralId === pastoral.id && a.servidorId)
+        .sort(
+          (a, b) =>
+            (a.funcao?.nome ?? "").localeCompare(b.funcao?.nome ?? "") ||
+            a.slotIndex - b.slotIndex ||
+            (a.servidorNomeSnapshot ?? a.servidor?.nome ?? "").localeCompare(b.servidorNomeSnapshot ?? b.servidor?.nome ?? "")
+        ),
+    }))
+    .filter((ocorrencia) => ocorrencia.atribuicoes.length > 0);
+
+  const hoje = format(paraExibicao(inicio), "eeee, d 'de' MMMM", { locale: ptBR });
+
+  return (
+    <div className="max-w-2xl">
+      <p className="mb-1 text-[11px] font-medium uppercase tracking-wider text-subtle">
+        {paroquia.nome} · {pastoral.nome}
+      </p>
+      <h1 className="text-2xl font-semibold tracking-tight text-fg">Presença do dia</h1>
+      <p className="mb-6 text-sm text-muted capitalize">{hoje}</p>
+
+      {ocorrencias.length === 0 ? (
+        <p className="text-sm text-muted">Nenhuma missa com servidores escalados hoje.</p>
+      ) : (
+        <div className="space-y-6">
+          {ocorrencias.map((ocorrencia) => (
+            <section key={ocorrencia.id} className="rounded-xl border border-line bg-surface">
+              <header className="border-b border-line px-4 py-3">
+                <h2 className="text-base font-semibold text-fg">
+                  {format(paraExibicao(lerDataArmazenada(ocorrencia.data)), "HH:mm")} — {ocorrencia.missa.comunidade}
+                </h2>
+              </header>
+              <ul className="divide-y divide-line/60">
+                {ocorrencia.atribuicoes.map((atribuicao) => {
+                  const salvarPresenca = registrarPresencaTodosAtivos.bind(null, ocorrencia.id, atribuicao.id);
+                  return (
+                    <li key={atribuicao.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-fg">
+                          {atribuicao.servidorNomeSnapshot ?? atribuicao.servidor?.nome ?? "—"}
+                        </p>
+                        {atribuicao.funcao ? <p className="text-xs text-muted">{atribuicao.funcao.nome}</p> : null}
+                      </div>
+                      <PresencaSelect action={salvarPresenca} defaultValue={atribuicao.presente} />
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

@@ -11,6 +11,8 @@ import {
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { supabase } from "@/lib/supabase";
+import { pastoralDoPainel } from "@/lib/sessao";
+import { CONFIG_PADRAO, getConfigMissasMap } from "@/lib/missaPastoral";
 import clsx from "clsx";
 import { buttonClasses } from "@/components/ui/Button";
 import { AcaoEscalaForm } from "@/components/admin/AcaoEscalaForm";
@@ -41,24 +43,35 @@ export default async function CalendarioPage({
 }) {
   const { mes } = await searchParams;
   const { periodoInicio, periodoFim } = periodoDoMes(mes);
+  const { paroquia, pastoral } = await pastoralDoPainel();
 
-  await materializarOcorrencias(periodoInicio, periodoFim);
+  await materializarOcorrencias(paroquia.id, periodoInicio, periodoFim);
 
-  const [ocorrenciasResult, requisitosResult] = await Promise.all([
+  const [ocorrenciasResult, requisitosResult, configs] = await Promise.all([
     supabase
       .from("MissaOcorrencia")
       .select("*, missa:Missa(*), atribuicoes:EscalaAtribuicao(*)")
+      .eq("paroquiaId", paroquia.id)
       .gte("data", periodoInicio.toISOString())
       .lte("data", periodoFim.toISOString())
       .order("data", { ascending: true })
       .returns<(MissaOcorrenciaRow & { missa: MissaRow; atribuicoes: EscalaAtribuicaoRow[] })[]>(),
-    supabase.from("MissaFuncaoRequisito").select("*").eq("ativo", true).returns<MissaFuncaoRequisitoRow[]>(),
+    supabase
+      .from("MissaFuncaoRequisito")
+      .select("*, funcao:Funcao!inner(pastoralId)")
+      .eq("funcao.pastoralId", pastoral.id)
+      .eq("ativo", true)
+      .returns<MissaFuncaoRequisitoRow[]>(),
+    getConfigMissasMap(pastoral.id),
   ]);
   if (ocorrenciasResult.error) throw ocorrenciasResult.error;
   if (requisitosResult.error) throw requisitosResult.error;
 
+  // Ocorrências são da paróquia; aqui só contam as vagas desta pastoral.
   const ocorrencias = (ocorrenciasResult.data ?? []).map((o) => ({
     ...o,
+    atribuicoes: o.atribuicoes.filter((a) => a.pastoralId === pastoral.id),
+    escalarTodosAtivos: (configs.get(o.missaId) ?? CONFIG_PADRAO).escalarTodosAtivos,
     dataExibicao: paraExibicao(lerDataArmazenada(o.data)),
   }));
   const requisitos = requisitosResult.data ?? [];
@@ -83,13 +96,14 @@ export default async function CalendarioPage({
   const periodoFimISO = periodoFim.toISOString();
 
   const hoje = new Date();
-  const publicado = await mesEstaPublicado(mesAtualParam);
+  const publicado = await mesEstaPublicado(pastoral.id, mesAtualParam);
+  const linkPublico = `/${paroquia.slug}/${pastoral.slug}/escala`;
 
   return (
     <div>
       <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="mb-1 text-[11px] font-medium uppercase tracking-wider text-subtle">Calendário</p>
+          <p className="mb-1 text-[11px] font-medium uppercase tracking-wider text-subtle">Calendário · {pastoral.nome}</p>
           <h1 className="text-2xl font-semibold capitalize tracking-tight text-fg">{mesAtualLabel}</h1>
           <div className="mt-2 flex gap-1 text-sm">
             <Link
@@ -153,8 +167,8 @@ export default async function CalendarioPage({
           {publicado ? (
             <span className="text-fg">
               Publicada para os servidores em{" "}
-              <Link href={`/escala?mes=${mesAtualParam}`} target="_blank" className="text-accent hover:text-accent-hover">
-                /escala ↗
+              <Link href={`${linkPublico}?mes=${mesAtualParam}`} target="_blank" className="text-accent hover:text-accent-hover">
+                {linkPublico} ↗
               </Link>
             </span>
           ) : (
@@ -213,7 +227,7 @@ export default async function CalendarioPage({
 
                     let cor = COR_SEM_ESCALA;
                     let rotulo = "";
-                    if (ocorrencia.missa.escalarTodosAtivos) {
+                    if (ocorrencia.escalarTodosAtivos) {
                       // Missa "todos os ativos" não tem vagas por função — o
                       // total de referência é quem já foi escalado, não uma
                       // meta fixa, então "completa" aqui só significa "já tem

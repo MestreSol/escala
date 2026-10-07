@@ -1,14 +1,15 @@
 /**
- * Popula o banco com dados de TESTE (placeholder): funções, missas com seus
- * requisitos, acúmulos, servidores com preferências, um par de irmãos
- * vinculados e alguns dias de indisponibilidade. Não gera escala — isso é
- * pra testar pelo botão "Gerar escala" no calendário.
+ * Cria uma paróquia de TESTE com duas pastorais (coroinhas e ministros) e
+ * popula com dados placeholder: funções, missas com seus requisitos,
+ * acúmulos, servidores com preferências, um par de irmãos vinculados e
+ * alguns dias de indisponibilidade. Não gera escala —
+ * isso é pra testar pelo botão "Gerar escala" no calendário.
  *
- * Só INSERE: se já houver funções, missas ou servidores no banco, o script
- * para sem mexer em nada (nunca apaga dados). Não cria usuário de login —
- * use `npm run criar-usuario` pra isso.
+ * Só INSERE: se já existir paróquia com esse endereço, o script para sem
+ * mexer em nada (nunca apaga dados). Não cria usuário de login — use
+ * `npm run criar-usuario` pra isso.
  *
- * Uso: npm run seed
+ * Uso: npm run seed -- [endereco] [nome]   (padrão: teste "Paróquia de Teste")
  */
 import "dotenv/config";
 import { createClient } from "@supabase/supabase-js";
@@ -55,15 +56,12 @@ async function inserir(tabela: string, linhas: Record<string, unknown>[]) {
   if (error) falhar(tabela, error);
 }
 
-async function bancoTemDados(): Promise<string | null> {
-  for (const tabela of ["Funcao", "Missa", "Servidor"]) {
-    // Sem `head: true`: consulta HEAD não traz corpo, e aí o erro chega sem
-    // código/mensagem (ex: o 42501 de permissão aparecia como { message: '' }).
-    const { data, error } = await supabase.from(tabela).select("id").limit(1);
-    if (error) falhar(tabela, error);
-    if ((data ?? []).length > 0) return tabela;
-  }
-  return null;
+async function paroquiaExiste(slug: string): Promise<boolean> {
+  // Sem `head: true`: consulta HEAD não traz corpo, e aí o erro chega sem
+  // código/mensagem (ex: o 42501 de permissão aparecia como { message: '' }).
+  const { data, error } = await supabase.from("Paroquia").select("id").eq("slug", slug).limit(1);
+  if (error) falhar("Paroquia", error);
+  return (data ?? []).length > 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -143,6 +141,26 @@ const MISSAS: {
   },
 ];
 
+// ---------------------------------------------------------------------------
+// Ministros (segunda pastoral, sem graus) — servem nas mesmas missas da
+// paróquia, com as próprias funções. Na missa de Aparecida os coroinhas são
+// "todos os ativos", mas os ministros são sorteados normalmente.
+// ---------------------------------------------------------------------------
+
+const FUNCOES_MINISTROS: { chave: string; nome: string; prioridade: Prioridade; quantidade: number }[] = [
+  { chave: "eucaristia", nome: "Ministro da Eucaristia", prioridade: "ALTA", quantidade: 2 },
+  { chave: "palavra", nome: "Ministro da Palavra", prioridade: "MEDIA", quantidade: 1 },
+];
+
+const MISSAS_MINISTROS: Record<string, string[]> = {
+  dom0930: ["eucaristia", "palavra"],
+  dom1800: ["eucaristia", "palavra"],
+  sab1700: ["eucaristia"],
+  aparecida: ["eucaristia"],
+};
+
+const QUANTIDADE_MINISTROS = 10;
+
 const PREFERENCIAS_POR_COMUNIDADE: Record<string, string[]> = {
   Matriz: ["dom0930", "dom1800", "qui1900"],
   "São José": ["sab1700", "dom1800"],
@@ -185,14 +203,23 @@ function proximosDomingos(quantidade: number): Date[] {
 }
 
 async function main() {
-  const tabelaComDados = await bancoTemDados();
-  if (tabelaComDados) {
-    console.error(
-      `O banco já tem dados (tabela "${tabelaComDados}"). O seed só roda em banco vazio e nunca apaga nada — nada foi alterado.`
-    );
+  const [slug = "teste", nomeParoquia = "Paróquia de Teste"] = process.argv.slice(2);
+  if (await paroquiaExiste(slug)) {
+    console.error(`Já existe uma paróquia com o endereço "${slug}". O seed nunca apaga nada — nada foi alterado.`);
     process.exitCode = 1;
     return;
   }
+
+  const paroquiaId = novoId();
+  await inserir("Paroquia", [{ id: paroquiaId, nome: nomeParoquia, slug, updatedAt: agora }]);
+
+  // Pastorais
+  const coroinhasId = novoId();
+  const ministrosId = novoId();
+  await inserir("Pastoral", [
+    { id: coroinhasId, paroquiaId, nome: "Coroinhas", slug: "coroinhas", tipo: "COROINHAS", updatedAt: agora },
+    { id: ministrosId, paroquiaId, nome: "Ministros", slug: "ministros", tipo: "MINISTROS", updatedAt: agora },
+  ]);
 
   // Funções
   const funcaoId = new Map(FUNCOES.map((f) => [f.chave, novoId()]));
@@ -200,6 +227,8 @@ async function main() {
     "Funcao",
     FUNCOES.map((f) => ({
       id: funcaoId.get(f.chave),
+      paroquiaId,
+      pastoralId: coroinhasId,
       nome: f.nome,
       prioridade: f.prioridade,
       grauMinimo: f.grauMinimo,
@@ -220,12 +249,22 @@ async function main() {
     "Missa",
     MISSAS.map((m) => ({
       id: missaId.get(m.chave),
+      paroquiaId,
       diaSemana: m.diaSemana ?? null,
       dataUnica: m.dataUnica ?? null,
       horario: m.horario,
       comunidade: m.comunidade,
-      escalarTodosAtivos: m.todosAtivos ?? false,
       updatedAt: agora,
+    }))
+  );
+  // "Todos os ativos" é dos coroinhas (ver MissaPastoral no schema).
+  await inserir(
+    "MissaPastoral",
+    MISSAS.filter((m) => m.todosAtivos).map((m) => ({
+      id: novoId(),
+      missaId: missaId.get(m.chave),
+      pastoralId: coroinhasId,
+      escalarTodosAtivos: true,
     }))
   );
   await inserir(
@@ -284,6 +323,8 @@ async function main() {
     "Servidor",
     servidores.map((s) => ({
       id: s.id,
+      paroquiaId,
+      pastoralId: coroinhasId,
       nome: s.nome,
       dataNascimento: s.dataNascimento,
       comunidade: s.comunidade,
@@ -308,16 +349,84 @@ async function main() {
     indisponiveis.map((s) => ({ id: novoId(), servidorId: s.id, data: escolher(domingos).toISOString() }))
   );
 
-  const porGrau = (g: Grau) => servidores.filter((s) => s.categoria === g).length;
-  console.log("Seed concluído:");
-  console.log(`  ${FUNCOES.length} funções (${ACUMULOS.length} acúmulos)`);
-  console.log(`  ${MISSAS.length} missas (${MISSAS.filter((m) => m.todosAtivos).length} com todos os ativos)`);
-  console.log(
-    `  ${servidores.length} servidores: ${porGrau("COROINHA")} coroinhas, ${porGrau("ACOLITO")} acólitos, ${porGrau("CERIMONIARIO")} cerimoniários`
+  // Ministros: funções sem grau (todas no grau único), servidores adultos.
+  const funcaoMinistroId = new Map(FUNCOES_MINISTROS.map((f) => [f.chave, novoId()]));
+  await inserir(
+    "Funcao",
+    FUNCOES_MINISTROS.map((f) => ({
+      id: funcaoMinistroId.get(f.chave),
+      paroquiaId,
+      pastoralId: ministrosId,
+      nome: f.nome,
+      prioridade: f.prioridade,
+      grauMinimo: "COROINHA",
+      quantidadePadrao: f.quantidade,
+      updatedAt: agora,
+    }))
   );
-  console.log(`  1 vínculo de irmãos (${irmaoA.nome} + ${irmaoB.nome})`);
-  console.log(`  ${indisponiveis.length} indisponibilidades nos próximos domingos`);
-  console.log("\nPara entrar no painel: npm run criar-usuario -- <usuario> <senha> ADMIN");
+  await inserir(
+    "MissaFuncaoRequisito",
+    Object.entries(MISSAS_MINISTROS).flatMap(([missa, funcoes]) =>
+      funcoes.map((chave) => ({
+        id: novoId(),
+        missaId: missaId.get(missa),
+        funcaoId: funcaoMinistroId.get(chave),
+        quantidade: FUNCOES_MINISTROS.find((f) => f.chave === chave)!.quantidade,
+      }))
+    )
+  );
+
+  const ministros = Array.from({ length: QUANTIDADE_MINISTROS }, () => {
+    let nome: string;
+    do {
+      nome = `${escolher(PRIMEIROS_NOMES)} ${escolher(SOBRENOMES)} ${escolher(SOBRENOMES)}`;
+    } while (nomesUsados.has(nome));
+    nomesUsados.add(nome);
+    const comunidade = aleatorio() < 0.7 ? "Matriz" : "São José";
+    const opcoes = PREFERENCIAS_POR_COMUNIDADE[comunidade].filter((chave) => chave in MISSAS_MINISTROS);
+    const preferencias = [...opcoes].sort(() => aleatorio() - 0.5).slice(0, inteiroEntre(1, opcoes.length));
+    return {
+      id: novoId(),
+      nome,
+      dataNascimento: dataNascimentoParaIdade(inteiroEntre(30, 70)),
+      comunidade,
+      preferencias,
+    };
+  });
+  await inserir(
+    "Servidor",
+    ministros.map((s) => ({
+      id: s.id,
+      paroquiaId,
+      pastoralId: ministrosId,
+      nome: s.nome,
+      dataNascimento: s.dataNascimento,
+      comunidade: s.comunidade,
+      categoria: "COROINHA",
+      updatedAt: agora,
+    }))
+  );
+  await inserir(
+    "ServidorMissaPreferencia",
+    ministros.flatMap((s) =>
+      s.preferencias.map((chave) => ({ id: novoId(), servidorId: s.id, missaId: missaId.get(chave) }))
+    )
+  );
+
+  const porGrau = (g: Grau) => servidores.filter((s) => s.categoria === g).length;
+  console.log(`Seed concluído na paróquia "${nomeParoquia}" (/${slug}):`);
+  console.log(`  ${MISSAS.length} missas (${MISSAS.filter((m) => m.todosAtivos).length} com todos os coroinhas)`);
+  console.log(`  Coroinhas (/${slug}/coroinhas):`);
+  console.log(`    ${FUNCOES.length} funções (${ACUMULOS.length} acúmulos)`);
+  console.log(
+    `    ${servidores.length} servidores: ${porGrau("COROINHA")} coroinhas, ${porGrau("ACOLITO")} acólitos, ${porGrau("CERIMONIARIO")} cerimoniários`
+  );
+  console.log(`    1 vínculo de irmãos (${irmaoA.nome} + ${irmaoB.nome})`);
+  console.log(`    ${indisponiveis.length} indisponibilidades nos próximos domingos`);
+  console.log(`  Ministros (/${slug}/ministros):`);
+  console.log(`    ${FUNCOES_MINISTROS.length} funções, ${ministros.length} ministros`);
+  console.log(`\nPara entrar no painel (paróquia toda): npm run criar-usuario -- <usuario> <senha> ADMIN ${slug}`);
+  console.log(`Só uma pastoral: npm run criar-usuario -- <usuario> <senha> ADMIN ${slug} ministros`);
 }
 
 // exitCode em vez de process.exit(): no Windows, sair na marra com conexões

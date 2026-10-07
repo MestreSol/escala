@@ -1,27 +1,33 @@
 import { notFound } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { pastoralDoPainel } from "@/lib/sessao";
+import { usaGraus } from "@/lib/constants";
 import { FuncaoForm } from "@/components/admin/FuncaoForm";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { ActionForm } from "@/components/ui/ActionForm";
 import { getFuncoesQuePodeAssumir } from "@/lib/funcaoAcumulacao";
+import { getFuncoesPareadas } from "@/lib/funcaoPar";
 import type { FuncaoRow } from "@/lib/types";
-import { updateFuncao, saveFuncaoAcumulacoes } from "../actions";
+import { updateFuncao, saveFuncaoAcumulacoes, saveFuncaoPares } from "../actions";
 
 export const dynamic = "force-dynamic";
 
 export default async function EditarFuncaoPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const { pastoral } = await pastoralDoPainel();
 
-  const [funcaoResult, outrasFuncoesResult, podeAssumirIdsLista] = await Promise.all([
-    supabase.from("Funcao").select("*").eq("id", id).returns<FuncaoRow[]>().maybeSingle(),
+  const [funcaoResult, outrasFuncoesResult, podeAssumirIdsLista, pareadasIdsLista] = await Promise.all([
+    supabase.from("Funcao").select("*").eq("id", id).eq("pastoralId", pastoral.id).returns<FuncaoRow[]>().maybeSingle(),
     supabase
       .from("Funcao")
       .select("id, nome")
+      .eq("pastoralId", pastoral.id)
       .eq("ativo", true)
       .neq("id", id)
       .order("nome", { ascending: true })
       .returns<{ id: string; nome: string }[]>(),
     getFuncoesQuePodeAssumir(id),
+    getFuncoesPareadas(id),
   ]);
 
   if (funcaoResult.error) throw funcaoResult.error;
@@ -34,13 +40,20 @@ export default async function EditarFuncaoPage({ params }: { params: Promise<{ i
 
   const action = updateFuncao.bind(null, funcao.id);
   const salvarAcumulacoes = saveFuncaoAcumulacoes.bind(null, funcao.id);
+  const salvarPares = saveFuncaoPares.bind(null, funcao.id);
+  const pareadasIds = new Set(pareadasIdsLista);
   const podeAssumirIds = new Set(podeAssumirIdsLista);
 
   return (
     <div className="max-w-2xl space-y-10">
       <div>
         <h1 className="mb-6 text-2xl font-semibold tracking-tight text-fg">Editar função</h1>
-        <FuncaoForm action={action} defaultValues={funcao} submitLabel="Salvar alterações" />
+        <FuncaoForm
+          action={action}
+          defaultValues={funcao}
+          submitLabel="Salvar alterações"
+          usaGraus={usaGraus(pastoral.tipo)}
+        />
       </div>
 
       <div>
@@ -71,6 +84,37 @@ export default async function EditarFuncaoPage({ params }: { params: Promise<{ i
               </label>
             ))}
             <SubmitButton pendingLabel="Salvando">Salvar acúmulos</SubmitButton>
+          </ActionForm>
+        )}
+      </div>
+
+      <div>
+        <h2 className="mb-1 text-lg font-semibold text-fg">Funções em par</h2>
+        <p className="mb-4 text-sm text-muted">
+          Marque as funções que trabalham junto com <strong>{funcao.nome}</strong> na missa (ex: Turiferário e
+          Naveteiro). Na escala, o par sempre junta um servidor <strong>experiente</strong> com um inexperiente —
+          a mesma regra das funções com 2 ou mais vagas, como o Ceroferário.
+        </p>
+
+        {outrasFuncoes.length === 0 ? (
+          <p className="text-sm text-muted">Cadastre outras funções para configurar pares.</p>
+        ) : (
+          <ActionForm action={salvarPares} successMessage="Pares salvos." className="space-y-3">
+            {outrasFuncoes.map((outra) => (
+              <label
+                key={outra.id}
+                className="flex items-center gap-3 rounded-md border border-line bg-surface px-4 py-3"
+              >
+                <input
+                  type="checkbox"
+                  name={`par_${outra.id}`}
+                  defaultChecked={pareadasIds.has(outra.id)}
+                  className="h-4 w-4 rounded border-line-strong"
+                />
+                <span className="text-sm font-medium text-fg">{outra.nome}</span>
+              </label>
+            ))}
+            <SubmitButton pendingLabel="Salvando">Salvar pares</SubmitButton>
           </ActionForm>
         )}
       </div>

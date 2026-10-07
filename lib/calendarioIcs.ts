@@ -2,6 +2,9 @@ import { supabase } from "@/lib/supabase";
 import { lerDataArmazenada, periodoDoMes } from "@/lib/occurrences";
 import { listarMesesPublicados } from "@/lib/escalaPublicada";
 import { FUSO_ICS, dataHoraIcs, fimDoEvento, tituloDoEvento } from "@/lib/agenda";
+import { getConfigMissasMap } from "@/lib/missaPastoral";
+import { rotuloTodos } from "@/lib/constants";
+import type { TipoPastoral } from "@/lib/types";
 
 /**
  * Calendário (.ics) com as missas que um servidor vai servir, pra assinar no
@@ -32,12 +35,14 @@ type AtribuicaoComOcorrencia = {
 type OcorrenciaTodosAtivos = {
   id: string;
   data: string;
-  missa: { comunidade: string; escalarTodosAtivos: boolean };
+  missa: { comunidade: string };
 };
 
-export async function buscarMissasDoServidor(servidorId: string): Promise<MissaNaAgenda[]> {
-  const publicados = await listarMesesPublicados();
+/** `servidorId` precisa já ter sido conferido como da pastoral `pastoralId`. */
+export async function buscarMissasDoServidor(pastoralId: string, servidorId: string): Promise<MissaNaAgenda[]> {
+  const [publicados, configs] = await Promise.all([listarMesesPublicados(pastoralId), getConfigMissasMap(pastoralId)]);
   if (publicados.length === 0) return [];
+  const missasTodosAtivos = [...configs].filter(([, config]) => config.escalarTodosAtivos).map(([missaId]) => missaId);
 
   const inicio = periodoDoMes(publicados[publicados.length - 1]).periodoInicio;
   const fim = periodoDoMes(publicados[0]).periodoFim;
@@ -52,14 +57,16 @@ export async function buscarMissasDoServidor(servidorId: string): Promise<MissaN
       .gte("ocorrencia.data", inicio.toISOString())
       .lte("ocorrencia.data", fim.toISOString())
       .returns<AtribuicaoComOcorrencia[]>(),
-    // Missas "Todos os coroinhas": todo ativo serve, mesmo sem linha de atribuição ainda.
-    supabase
-      .from("MissaOcorrencia")
-      .select("id, data, missa:Missa!inner(comunidade, escalarTodosAtivos)")
-      .eq("missa.escalarTodosAtivos", true)
-      .gte("data", inicio.toISOString())
-      .lte("data", fim.toISOString())
-      .returns<OcorrenciaTodosAtivos[]>(),
+    // Missas "Todos os coroinhas" da pastoral: todo ativo serve, mesmo sem linha de atribuição ainda.
+    missasTodosAtivos.length === 0
+      ? { data: [] as OcorrenciaTodosAtivos[], error: null }
+      : supabase
+          .from("MissaOcorrencia")
+          .select("id, data, missa:Missa(comunidade)")
+          .in("missaId", missasTodosAtivos)
+          .gte("data", inicio.toISOString())
+          .lte("data", fim.toISOString())
+          .returns<OcorrenciaTodosAtivos[]>(),
   ]);
   if (atribuicoesResult.error) throw atribuicoesResult.error;
   if (todosAtivosResult.error) throw todosAtivosResult.error;
@@ -123,7 +130,10 @@ function dobrar(linha: string): string {
   return partes.join("\r\n ");
 }
 
-export function gerarIcs(missas: MissaNaAgenda[], opcoes: { nomeCalendario: string; servidorId: string; urlEscala: string }): string {
+export function gerarIcs(
+  missas: MissaNaAgenda[],
+  opcoes: { nomeCalendario: string; servidorId: string; urlEscala: string; rotuloTodos: string }
+): string {
   const agora = new Date();
   const carimbo = `${agora.toISOString().replace(/[-:]/g, "").slice(0, 15)}Z`;
 
@@ -152,7 +162,7 @@ export function gerarIcs(missas: MissaNaAgenda[], opcoes: { nomeCalendario: stri
 
   for (const missa of missas) {
     const descricao = [
-      missa.todosAtivos ? "Todos os coroinhas servem nesta missa." : `Função: ${missa.funcoes.join(" + ") || "—"}`,
+      missa.todosAtivos ? `${opcoes.rotuloTodos} servem nesta missa.` : `Função: ${missa.funcoes.join(" + ") || "—"}`,
       `Comunidade: ${missa.comunidade}`,
       `Escala completa: ${opcoes.urlEscala}`,
     ].join("\n");
@@ -163,7 +173,7 @@ export function gerarIcs(missas: MissaNaAgenda[], opcoes: { nomeCalendario: stri
       `DTSTAMP:${carimbo}`,
       `DTSTART;TZID=${FUSO_ICS}:${dataHoraIcs(missa.inicio)}`,
       `DTEND;TZID=${FUSO_ICS}:${dataHoraIcs(fimDoEvento(missa.inicio))}`,
-      `SUMMARY:${escapar(tituloDoEvento(missa))}`,
+      `SUMMARY:${escapar(tituloDoEvento(missa, opcoes.rotuloTodos))}`,
       `LOCATION:${escapar(missa.comunidade)}`,
       `DESCRIPTION:${escapar(descricao)}`,
       // Lembrete 1h antes (apps que assinam por URL, como o Google, podem ignorar).
@@ -178,4 +188,60 @@ export function gerarIcs(missas: MissaNaAgenda[], opcoes: { nomeCalendario: stri
 
   linhas.push("END:VCALENDAR");
   return linhas.map(dobrar).join("\r\n") + "\r\n";
+}
+
+/**
+ * Resposta HTTP da agenda .ics de um servidor (`arquivo` = "<servidorId>.ics").
+ * Com os slugs, só vale servidor daquela paróquia/pastoral; sem eles (rotas
+ * antigas /escala/calendario/... e /<paroquia>/escala/calendario/..., de antes
+ * do multi-paróquia e das pastorais — agendas já assinadas continuam
+ * funcionando), vale a paróquia/pastoral do próprio servidor.
+ */
+export async function responderAgendaDoServidor(
+  request: Request,
+  arquivo: string,
+  slugs: { paroquia?: string; pastoral?: string } = {}
+): Promise<Response> {
+  const servidorId = arquivo.replace(/\.ics$/i, "");
+  if (!/^[0-9a-z-]{8,64}$/i.test(servidorId)) {
+    return new Response("Agenda não encontrada.", { status: 404 });
+  }
+
+  let consulta = supabase
+    .from("Servidor")
+    .select("id, nome, pastoralId, paroquia:Paroquia!inner(slug, ativo), pastoral:Pastoral!inner(slug, ativo, tipo)")
+    .eq("id", servidorId)
+    .eq("ativo", true)
+    .eq("paroquia.ativo", true)
+    .eq("pastoral.ativo", true);
+  if (slugs.paroquia) consulta = consulta.eq("paroquia.slug", slugs.paroquia);
+  if (slugs.pastoral) consulta = consulta.eq("pastoral.slug", slugs.pastoral);
+  const { data: servidor, error } = await consulta.maybeSingle<{
+    id: string;
+    nome: string;
+    pastoralId: string;
+    paroquia: { slug: string };
+    pastoral: { slug: string; tipo: TipoPastoral };
+  }>();
+  if (error) throw error;
+  if (!servidor) return new Response("Agenda não encontrada.", { status: 404 });
+
+  const missas = await buscarMissasDoServidor(servidor.pastoralId, servidor.id);
+  const origem = new URL(request.url).origin;
+  const ics = gerarIcs(missas, {
+    nomeCalendario: `Escala — ${servidor.nome.split(" ")[0]}`,
+    servidorId: servidor.id,
+    urlEscala: `${origem}/${servidor.paroquia.slug}/${servidor.pastoral.slug}/escala`,
+    rotuloTodos: rotuloTodos(servidor.pastoral.tipo),
+  });
+
+  const baixar = new URL(request.url).searchParams.has("download");
+  return new Response(ics, {
+    headers: {
+      "Content-Type": "text/calendar; charset=utf-8",
+      "Content-Disposition": `${baixar ? "attachment" : "inline"}; filename="minhas-missas.ics"`,
+      // Apps de agenda buscam de tempos em tempos; 5 min de cache já basta.
+      "Cache-Control": "public, max-age=300",
+    },
+  });
 }

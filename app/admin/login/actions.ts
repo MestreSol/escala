@@ -4,7 +4,7 @@ import bcrypt from "bcryptjs";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import { criarSessionToken, SESSION_COOKIE_NAME } from "@/lib/auth";
+import { criarSessionToken, PAROQUIA_COOKIE_NAME, PASTORAL_COOKIE_NAME, SESSION_COOKIE_NAME } from "@/lib/auth";
 import type { UsuarioRow } from "@/lib/types";
 
 export type LoginState = { error?: string };
@@ -72,5 +72,7 @@ export async function login(_prevState: LoginState, formData: FormData): Promise
 export async function logout() {
   const cookieStore = await cookies();
   cookieStore.delete(SESSION_COOKIE_NAME);
+  cookieStore.delete(PAROQUIA_COOKIE_NAME);
+  cookieStore.delete(PASTORAL_COOKIE_NAME);
   redirect("/admin/login");
 }

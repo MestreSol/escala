@@ -2,8 +2,9 @@ import Link from "next/link";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { supabase } from "@/lib/supabase";
+import { pastoralDoPainel } from "@/lib/sessao";
 import { Badge } from "@/components/ui/Badge";
-import { GRAU_LABEL } from "@/lib/constants";
+import { GRAU_LABEL, usaGraus } from "@/lib/constants";
 import { lerDataArmazenada, paraExibicao } from "@/lib/occurrences";
 import { calcularIdade } from "@/lib/idade";
 import type { Grau } from "@/lib/types";
@@ -31,6 +32,7 @@ export default async function AniversariantesPage({
   searchParams: Promise<{ mes?: string }>;
 }) {
   const { mes } = await searchParams;
+  const { pastoral } = await pastoralDoPainel();
   const hoje = new Date();
 
   const mesParam = Number(mes);
@@ -40,6 +42,7 @@ export default async function AniversariantesPage({
   const { data, error } = await supabase
     .from("Servidor")
     .select("id, nome, comunidade, categoria, fotoUrl, dataNascimento")
+    .eq("pastoralId", pastoral.id)
     .eq("ativo", true)
     .not("dataNascimento", "is", null)
     .returns<ServidorComNascimento[]>();
@@ -107,7 +110,9 @@ export default async function AniversariantesPage({
                   <td className="px-4 py-3 text-sm font-medium text-fg">{servidor.nascimento.getUTCDate()}</td>
                   <td className="px-4 py-3 text-sm font-medium text-fg">{servidor.nome}</td>
                   <td className="px-4 py-3 text-sm">
-                    <Badge color={GRAU_COLOR[servidor.categoria]}>{GRAU_LABEL[servidor.categoria]}</Badge>
+                    {usaGraus(pastoral.tipo) ? (
+                      <Badge color={GRAU_COLOR[servidor.categoria]}>{GRAU_LABEL[servidor.categoria]}</Badge>
+                    ) : null}
                   </td>
                   <td className="px-4 py-3 text-sm text-muted">{servidor.comunidade}</td>
                   <td className="px-4 py-3 text-right text-sm text-muted">

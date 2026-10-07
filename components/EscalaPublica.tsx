@@ -32,14 +32,17 @@ export function EscalaPublica({
   idPorNome,
   origem,
   agora,
+  rotuloTodos,
 }: {
   missas: MissaPublica[];
   nomes: string[];
   /** nome -> id do servidor, pra montar o link da agenda pessoal. */
   idPorNome: Record<string, string>;
-  /** Ex: "https://escala.vercel.app" — base dos links de agenda. */
+  /** Endereço público da pastoral (ex: "https://escala.vercel.app/matriz/coroinhas") — base dos links de agenda. */
   origem: string;
   agora: string;
+  /** Rótulo da missa "todos os ativos" da pastoral (ex: "Todos os coroinhas"). */
+  rotuloTodos: string;
 }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -92,11 +95,11 @@ export function EscalaPublica({
             .map((m) => ({
               missa: m,
               funcoes: m.todosAtivos
-                ? ["Todos os coroinhas"]
+                ? [rotuloTodos]
                 : m.linhas.filter((l) => l.nome === meuNome).map((l) => l.funcao),
             }))
         : [],
-    [missas, meuNome]
+    [missas, meuNome, rotuloTodos]
   );
 
   const visiveis = soAsMinhas && meuNome ? missas.filter(participa) : missas;
@@ -170,10 +173,13 @@ export function EscalaPublica({
                       <a
                         href={linkGoogleAgenda({
                           inicioLocal: missa.inicio,
-                          titulo: tituloDoEvento({
-                            funcoes: funcoes.map((f) => f.replace(/ #\d+$/, "")),
-                            todosAtivos: missa.todosAtivos,
-                          }),
+                          titulo: tituloDoEvento(
+                            {
+                              funcoes: funcoes.map((f) => f.replace(/ #\d+$/, "")),
+                              todosAtivos: missa.todosAtivos,
+                            },
+                            rotuloTodos
+                          ),
                           comunidade: missa.comunidade,
                           detalhes: `Escala completa: ${origem}/escala`,
                         })}
@@ -227,6 +233,7 @@ export function EscalaPublica({
                     passada={missa.inicio < agora}
                     proxima={missa.id === proximaId}
                     destacada={participa(missa)}
+                    rotuloTodos={rotuloTodos}
                   />
                 ))}
               </div>
@@ -244,12 +251,14 @@ function CartaoMissa({
   passada,
   proxima,
   destacada,
+  rotuloTodos,
 }: {
   missa: MissaPublica;
   meuNome: string | null;
   passada: boolean;
   proxima: boolean;
   destacada: boolean;
+  rotuloTodos: string;
 }) {
   return (
     <article
@@ -275,7 +284,7 @@ function CartaoMissa({
       </header>
 
       {missa.todosAtivos ? (
-        <p className="py-2 text-sm font-semibold tracking-wide text-accent">TODOS OS COROINHAS</p>
+        <p className="py-2 text-sm font-semibold uppercase tracking-wide text-accent">{rotuloTodos}</p>
       ) : missa.linhas.length === 0 ? (
         <p className="py-2 text-sm text-subtle">Escala ainda não definida.</p>
       ) : (

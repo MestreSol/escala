@@ -184,3 +184,9 @@ export function agoraNaParoquia(): string {
   );
   return `${partes.year}-${partes.month}-${partes.day}T${partes.hour}:${partes.minute}`;
 }
+
+/** Início e fim (âncora UTC, ver topo do arquivo) do dia de hoje na paróquia — para filtrar MissaOcorrencia.data. */
+export function intervaloDeHojeNaParoquia(): { inicio: Date; fim: Date } {
+  const inicio = parseDataUnica(agoraNaParoquia().slice(0, 10));
+  return { inicio, fim: new Date(inicio.getTime() + UM_DIA_MS - 1) };
+}

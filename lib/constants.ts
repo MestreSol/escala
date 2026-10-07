@@ -34,3 +34,21 @@ export const GRAU_ORDEM: Record<string, number> = {
 };
 
 export const GRAUS_EM_ORDEM = ["COROINHA", "ACOLITO", "CERIMONIARIO"] as const;
+
+export const TIPO_PASTORAL_LABEL: Record<string, string> = {
+  COROINHAS: "Coroinhas (acólitos e cerimoniários)",
+  MINISTROS: "Ministros",
+};
+
+/** Só a pastoral de coroinhas tem hierarquia de grau; nas outras todo mundo fica no grau mais baixo. */
+export function usaGraus(tipo: string): boolean {
+  return tipo === "COROINHAS";
+}
+
+/** Grau gravado quando a pastoral não usa graus (ver usaGraus). */
+export const GRAU_UNICO = "COROINHA";
+
+/** Rótulo da missa "todos os ativos" (lista de presença sem funções). */
+export function rotuloTodos(tipo: string): string {
+  return tipo === "MINISTROS" ? "Todos os ministros" : "Todos os coroinhas";
+}

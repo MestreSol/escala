@@ -82,10 +82,36 @@ export const usuarioSchema = z.object({
     .max(64, "Usuário muito longo")
     .regex(/^[a-zA-Z0-9._-]+$/, "Use só letras, números, ponto, hífen ou _"),
   senha: z.string().min(8, "A senha deve ter pelo menos 8 caracteres").max(128, "Senha muito longa"),
-  papel: z.enum(["ADMIN", "OPERADOR"]),
+  papel: z.enum(["ADMIN", "OPERADOR", "PRESENCA"]),
+});
+
+export const paroquiaSchema = z.object({
+  nome: z.string().trim().min(2, "Informe o nome da paróquia").max(100, "Nome muito longo"),
+  slug: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .min(2, "O endereço precisa ter pelo menos 2 caracteres")
+    .max(40, "Endereço muito longo")
+    .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, "Use só letras minúsculas, números e hífen (ex: sao-jose)"),
+  ativo: z.coerce.boolean().default(true),
+});
+
+export const pastoralSchema = z.object({
+  nome: z.string().trim().min(2, "Informe o nome da pastoral").max(60, "Nome muito longo"),
+  slug: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .min(2, "O endereço precisa ter pelo menos 2 caracteres")
+    .max(40, "Endereço muito longo")
+    .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, "Use só letras minúsculas, números e hífen (ex: ministros)"),
+  tipo: z.enum(["COROINHAS", "MINISTROS"], { message: "Selecione o tipo da pastoral" }),
+  ativo: z.coerce.boolean().default(true),
 });
 
 export type FuncaoInput = z.infer<typeof funcaoSchema>;
 export type MissaInput = z.infer<typeof missaSchema>;
 export type ServidorInput = z.infer<typeof servidorSchema>;
 export type UsuarioInput = z.infer<typeof usuarioSchema>;
+export type ParoquiaInput = z.infer<typeof paroquiaSchema>;

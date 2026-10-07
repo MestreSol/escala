@@ -29,20 +29,30 @@ export default async function ConfirmarEscalaPage({
       <h1 className="mb-1 text-2xl font-semibold tracking-tight text-fg">Escala confirmada — {mesLabel}</h1>
       <p className="mb-8 text-sm text-muted">
         Duas imagens foram geradas: uma completa (com as funções) para o coordenador, e outra só
-        com os nomes para compartilhar com o grupo.
+        com os nomes para compartilhar com o grupo. Para imprimir, baixe em PDF: sai com fundo
+        branco, em folhas A4.
       </p>
 
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
         <div>
           <div className="mb-2 flex items-center justify-between">
             <h2 className="text-lg font-semibold text-fg">Completa (funções e nomes)</h2>
-            <a
-              href={urlCompleta}
-              download={`escala-completa-${mesParam}.png`}
-              className="text-sm font-medium text-accent hover:text-accent-hover"
-            >
-              Baixar
-            </a>
+            <div className="flex gap-4">
+              <a
+                href={urlCompleta}
+                download={`escala-completa-${mesParam}.png`}
+                className="text-sm font-medium text-accent hover:text-accent-hover"
+              >
+                Baixar imagem
+              </a>
+              <a
+                href={`/admin/calendario/pdf?mes=${mesParam}&variante=completa`}
+                className="text-sm font-medium text-accent hover:text-accent-hover"
+                title="Fundo branco, em folhas A4 — pra imprimir"
+              >
+                Baixar PDF
+              </a>
+            </div>
           </div>
           <div className="overflow-hidden rounded-xl border border-line bg-surface-2">
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -53,13 +63,22 @@ export default async function ConfirmarEscalaPage({
         <div>
           <div className="mb-2 flex items-center justify-between">
             <h2 className="text-lg font-semibold text-fg">Somente nomes</h2>
-            <a
-              href={urlNomes}
-              download={`escala-nomes-${mesParam}.png`}
-              className="text-sm font-medium text-accent hover:text-accent-hover"
-            >
-              Baixar
-            </a>
+            <div className="flex gap-4">
+              <a
+                href={urlNomes}
+                download={`escala-nomes-${mesParam}.png`}
+                className="text-sm font-medium text-accent hover:text-accent-hover"
+              >
+                Baixar imagem
+              </a>
+              <a
+                href={`/admin/calendario/pdf?mes=${mesParam}&variante=nomes`}
+                className="text-sm font-medium text-accent hover:text-accent-hover"
+                title="Fundo branco, em folhas A4 — pra imprimir"
+              >
+                Baixar PDF
+              </a>
+            </div>
           </div>
           <div className="overflow-hidden rounded-xl border border-line bg-surface-2">
             {/* eslint-disable-next-line @next/next/no-img-element */}

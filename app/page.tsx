@@ -1,27 +1,31 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { buttonClasses } from "@/components/ui/Button";
 import { Marca } from "@/components/ui/Marca";
+import { listarParoquiasAtivas } from "@/lib/paroquia";
 
-export default function HomePage() {
+export const dynamic = "force-dynamic";
+
+/** Escolha da paróquia. Com uma só cadastrada, vai direto pra página dela. */
+export default async function HomePage() {
+  const paroquias = await listarParoquiasAtivas();
+  if (paroquias.length === 1) redirect(`/${paroquias[0].slug}`);
+
   return (
     <div className="mx-auto flex min-h-screen max-w-sm animate-fade-in flex-col items-center justify-center gap-10 px-4 text-center">
       <div className="flex flex-col items-center">
         <Marca className="mb-6" />
         <h1 className="text-2xl font-semibold tracking-tight text-fg">Escala de Servidores do Altar</h1>
         <p className="mt-3 text-sm text-muted">
-          Gestão de missas, funções e escala de acólitos, coroinhas e cerimoniários.
+          {paroquias.length > 0 ? "Escolha a sua paróquia." : "Nenhuma paróquia cadastrada ainda."}
         </p>
       </div>
       <div className="flex w-full flex-col gap-2.5">
-        <Link href="/escala" className={buttonClasses("primary", "py-2.5")}>
-          Ver a escala do mês
-        </Link>
-        <Link href="/inscricao" className={buttonClasses("secondary", "py-2.5")}>
-          Quero me inscrever para servir
-        </Link>
-        <Link href="/indisponibilidade" className={buttonClasses("secondary", "py-2.5")}>
-          Avisar que não posso servir em um dia
-        </Link>
+        {paroquias.map((paroquia) => (
+          <Link key={paroquia.id} href={`/${paroquia.slug}`} className={buttonClasses("secondary", "py-2.5")}>
+            {paroquia.nome}
+          </Link>
+        ))}
         <Link href="/admin" className={buttonClasses("ghost", "py-2.5")}>
           Área do administrador
         </Link>

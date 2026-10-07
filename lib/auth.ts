@@ -1,9 +1,13 @@
 import { SignJWT, jwtVerify } from "jose";
 
 export const SESSION_COOKIE_NAME = "escala_session";
+/** Paróquia em que o SUPERADMIN está trabalhando (ver obterParoquiaAtual em lib/sessao.ts). */
+export const PAROQUIA_COOKIE_NAME = "escala_paroquia";
+/** Pastoral em que o usuário da paróquia toda está trabalhando (ver obterPastoralAtual em lib/sessao.ts). */
+export const PASTORAL_COOKIE_NAME = "escala_pastoral";
 const SESSION_DURATION_SECONDS = 60 * 60 * 24 * 7; // 7 dias
 
-export type PapelUsuario = "ADMIN" | "OPERADOR";
+export type PapelUsuario = "ADMIN" | "OPERADOR" | "SUPERADMIN" | "PRESENCA";
 
 export type SessaoPayload = {
   id: string;
@@ -36,7 +40,10 @@ export async function verificarSessionToken(token: string): Promise<SessaoPayloa
     if (
       typeof payload.id !== "string" ||
       typeof payload.username !== "string" ||
-      (payload.papel !== "ADMIN" && payload.papel !== "OPERADOR")
+      (payload.papel !== "ADMIN" &&
+        payload.papel !== "OPERADOR" &&
+        payload.papel !== "SUPERADMIN" &&
+        payload.papel !== "PRESENCA")
     ) {
       return null;
     }

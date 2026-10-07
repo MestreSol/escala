@@ -5,9 +5,13 @@ import type { ServidorIndisponibilidadeRow } from "@/lib/types";
 
 const TABELA = "ServidorIndisponibilidade";
 
-/** Mapa completo servidorId -> dias (diaChave) em que avisou que não pode servir, pro gerador de escala. */
-export async function getIndisponibilidadeMap(): Promise<Map<string, Set<string>>> {
-  const { data, error } = await supabase.from(TABELA).select("servidorId, data").returns<ServidorIndisponibilidadeRow[]>();
+/** Mapa servidorId -> dias (diaChave) em que avisou que não pode servir, pro gerador de escala. */
+export async function getIndisponibilidadeMap(pastoralId: string): Promise<Map<string, Set<string>>> {
+  const { data, error } = await supabase
+    .from(TABELA)
+    .select("servidorId, data, servidor:Servidor!inner(pastoralId)")
+    .eq("servidor.pastoralId", pastoralId)
+    .returns<ServidorIndisponibilidadeRow[]>();
   if (error) throw error;
 
   const mapa = new Map<string, Set<string>>();

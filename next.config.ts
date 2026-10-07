@@ -37,6 +37,8 @@ const cabecalhosDeSeguranca = [
 ];
 
 const nextConfig: NextConfig = {
+  // Gera .next/standalone (server.js + só as dependências usadas) pra imagem Docker.
+  output: "standalone",
   poweredByHeader: false,
   async headers() {
     return [

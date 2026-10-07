@@ -1,13 +1,18 @@
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
+import { pastoralDoPainel } from "@/lib/sessao";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminDashboardPage() {
+  const { paroquia, pastoral } = await pastoralDoPainel();
+  // Funções e servidores são da pastoral; missas, da paróquia toda.
+  const contarDaPastoral = (tabela: "Funcao" | "Servidor") =>
+    supabase.from(tabela).select("id", { count: "exact", head: true }).eq("pastoralId", pastoral.id).eq("ativo", true);
   const [funcoes, missas, servidores] = await Promise.all([
-    supabase.from("Funcao").select("id", { count: "exact", head: true }).eq("ativo", true),
-    supabase.from("Missa").select("id", { count: "exact", head: true }).eq("ativo", true),
-    supabase.from("Servidor").select("id", { count: "exact", head: true }).eq("ativo", true),
+    contarDaPastoral("Funcao"),
+    supabase.from("Missa").select("id", { count: "exact", head: true }).eq("paroquiaId", paroquia.id).eq("ativo", true),
+    contarDaPastoral("Servidor"),
   ]);
 
   const totalFuncoes = funcoes.count ?? 0;
@@ -16,13 +21,16 @@ export default async function AdminDashboardPage() {
 
   const cards = [
     { label: "Funções ativas", value: totalFuncoes, href: "/admin/funcoes" },
-    { label: "Missas ativas", value: totalMissas, href: "/admin/missas" },
+    { label: "Missas ativas (paróquia)", value: totalMissas, href: "/admin/missas" },
     { label: "Servidores cadastrados", value: totalServidores, href: "/admin/servidores" },
   ];
+  const linkPublico = `/${paroquia.slug}/${pastoral.slug}`;
 
   return (
     <div>
-      <p className="mb-1 text-[11px] font-medium uppercase tracking-wider text-subtle">Visão geral</p>
+      <p className="mb-1 text-[11px] font-medium uppercase tracking-wider text-subtle">
+        {paroquia.nome} · {pastoral.nome}
+      </p>
       <h1 className="mb-8 text-2xl font-semibold tracking-tight text-fg">Painel</h1>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         {cards.map((card, index) => (
@@ -42,7 +50,8 @@ export default async function AdminDashboardPage() {
       </div>
       <p className="mt-10 max-w-xl text-sm leading-relaxed text-subtle">
         Comece cadastrando as funções, depois as missas e seus requisitos de função. Em seguida,
-        compartilhe o link de inscrição com os servidores e gere a escala pelo calendário.
+        compartilhe o link de inscrição (<span className="text-muted">{linkPublico}/inscricao</span>) com os
+        servidores e gere a escala pelo calendário.
       </p>
     </div>
   );

@@ -2,6 +2,9 @@ import Link from "next/link";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { supabase } from "@/lib/supabase";
+import { pastoralDoPainel } from "@/lib/sessao";
+import { CONFIG_PADRAO, getConfigMissasMap, type ConfigMissaPastoral } from "@/lib/missaPastoral";
+import { rotuloTodos } from "@/lib/constants";
 import { buttonClasses } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { DataTable } from "@/components/ui/DataTable";
@@ -12,23 +15,39 @@ import { deleteMissa } from "../actions";
 
 export const dynamic = "force-dynamic";
 
-type MissaComRequisitos = MissaRow & { funcoesRequisito: MissaFuncaoRequisitoRow[] };
+type MissaComRequisitos = MissaRow & {
+  funcoesRequisito: (MissaFuncaoRequisitoRow & { funcao: { pastoralId: string } })[];
+};
 
-function labelQuemServe(missa: MissaRow): string {
-  if (missa.escalarTodosAtivos) return "Todos os coroinhas";
-  if (missa.comunidadeResponsavel) return `Comunidade: ${missa.comunidadeResponsavel}`;
+function labelQuemServe(config: ConfigMissaPastoral, rotuloTodosDaPastoral: string): string {
+  if (config.escalarTodosAtivos) return rotuloTodosDaPastoral;
+  if (config.comunidadeResponsavel) return `Comunidade: ${config.comunidadeResponsavel}`;
   return "Sorteio entre todos";
 }
 
 export default async function MissasGrandesPage() {
-  const { data, error } = await supabase
-    .from("Missa")
-    .select("*, funcoesRequisito:MissaFuncaoRequisito(*)")
-    .eq("ativo", true)
-    .not("dataUnica", "is", null)
-    .returns<MissaComRequisitos[]>();
+  const { paroquia, pastoral } = await pastoralDoPainel();
+  const [{ data, error }, configs] = await Promise.all([
+    supabase
+      .from("Missa")
+      .select("*, funcoesRequisito:MissaFuncaoRequisito(*, funcao:Funcao(pastoralId))")
+      .eq("paroquiaId", paroquia.id)
+      .eq("ativo", true)
+      .not("dataUnica", "is", null)
+      .returns<MissaComRequisitos[]>(),
+    getConfigMissasMap(pastoral.id),
+  ]);
   if (error) throw error;
-  const missas = data ?? [];
+  // Missas são da paróquia; funções e "quem serve" são desta pastoral.
+  const missas = (data ?? []).map((missa) => {
+    const config = configs.get(missa.id) ?? CONFIG_PADRAO;
+    return {
+      ...missa,
+      ...config,
+      quemServe: labelQuemServe(config, rotuloTodos(pastoral.tipo)),
+      funcoesRequisito: missa.funcoesRequisito.filter((r) => r.funcao.pastoralId === pastoral.id),
+    };
+  });
 
   return (
     <div>
@@ -65,7 +84,7 @@ export default async function MissasGrandesPage() {
               data: missa.dataUnica,
               horario: missa.horario,
               comunidade: missa.comunidade,
-              quemServe: labelQuemServe(missa),
+              quemServe: missa.quemServe,
               funcoes: missa.escalarTodosAtivos ? -1 : totalFuncoes,
             },
             celulas: {
@@ -78,7 +97,7 @@ export default async function MissasGrandesPage() {
               comunidade: <span className="text-muted">{missa.comunidade}</span>,
               quemServe: (
                 <Badge color={missa.escalarTodosAtivos ? "blue" : missa.comunidadeResponsavel ? "green" : "gray"}>
-                  {labelQuemServe(missa)}
+                  {missa.quemServe}
                 </Badge>
               ),
               funcoes: missa.escalarTodosAtivos ? (
@@ -93,7 +112,7 @@ export default async function MissasGrandesPage() {
                   </Link>
                   <DeleteButton
                     action={deleteMissa.bind(null, missa.id)}
-                    confirmMessage="Excluir esta missa grande? Isso também remove ocorrências e escalas geradas para ela."
+                    confirmMessage="Excluir esta missa grande? Ela é da paróquia toda: isso remove as ocorrências e as escalas geradas para ela em todas as pastorais."
                   />
                 </div>
               ),

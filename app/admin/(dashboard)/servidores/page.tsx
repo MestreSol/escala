@@ -1,13 +1,15 @@
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
+import { pastoralDoPainel } from "@/lib/sessao";
 import { Badge } from "@/components/ui/Badge";
 import { DeleteButton } from "@/components/admin/DeleteButton";
-import { GRAU_LABEL, GRAU_ORDEM } from "@/lib/constants";
+import { GRAU_LABEL, GRAU_ORDEM, usaGraus } from "@/lib/constants";
 import { DataTable } from "@/components/ui/DataTable";
 import { lerDataArmazenada } from "@/lib/occurrences";
 import { calcularIdade } from "@/lib/idade";
 import type { ServidorMissaPreferenciaRow, ServidorRow } from "@/lib/types";
-import { deleteServidor } from "./actions";
+import { ActionForm } from "@/components/ui/ActionForm";
+import { alternarExperiente, deleteServidor } from "./actions";
 
 const GRAU_COLOR: Record<string, "green" | "blue" | "yellow"> = {
   COROINHA: "green",
@@ -23,14 +25,17 @@ export default async function ServidoresPage({
   searchParams: Promise<{ comunidade?: string; categoria?: string }>;
 }) {
   const { comunidade, categoria } = await searchParams;
+  const { pastoral } = await pastoralDoPainel();
+  const comGraus = usaGraus(pastoral.tipo);
 
   let query = supabase
     .from("Servidor")
     .select("*, preferenciasMissas:ServidorMissaPreferencia(*)")
+    .eq("pastoralId", pastoral.id)
     .eq("ativo", true);
 
   if (comunidade) query = query.ilike("comunidade", `%${comunidade}%`);
-  if (categoria) query = query.eq("categoria", categoria);
+  if (categoria && comGraus) query = query.eq("categoria", categoria);
 
   const { data, error } = await query.returns<
     (ServidorRow & { preferenciasMissas: ServidorMissaPreferenciaRow[] })[]
@@ -42,7 +47,9 @@ export default async function ServidoresPage({
     <div>
       <div className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight text-fg">Servidores</h1>
-        <p className="text-sm text-muted">{servidores.length} cadastrado(s)</p>
+        <p className="text-sm text-muted">
+          {pastoral.nome} · {servidores.length} cadastrado(s)
+        </p>
       </div>
 
       <form className="mb-4 flex flex-wrap items-end gap-3">
@@ -56,7 +63,7 @@ export default async function ServidoresPage({
             placeholder="Buscar..."
           />
         </div>
-        <div>
+        <div hidden={!comGraus}>
           <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-muted">Categoria</label>
           <select
             name="categoria"
@@ -84,7 +91,8 @@ export default async function ServidoresPage({
           { chave: "nome", titulo: "Nome", ordenavel: true },
           { chave: "idade", titulo: "Idade", ordenavel: true },
           { chave: "comunidade", titulo: "Comunidade", ordenavel: true },
-          { chave: "categoria", titulo: "Categoria", ordenavel: true },
+          ...(comGraus ? [{ chave: "categoria", titulo: "Categoria", ordenavel: true }] : []),
+          { chave: "experiente", titulo: "Experiente", ordenavel: true },
           { chave: "missas", titulo: "Missas", ordenavel: true },
           { chave: "acoes", titulo: "", alinhar: "right" },
         ]}
@@ -97,6 +105,7 @@ export default async function ServidoresPage({
             idade,
             comunidade: servidor.comunidade,
             categoria: GRAU_ORDEM[servidor.categoria] ?? null,
+            experiente: servidor.experiente ? 0 : 1,
             missas: servidor.preferenciasMissas.length,
           },
           celulas: {
@@ -124,6 +133,24 @@ export default async function ServidoresPage({
               ),
             comunidade: <span className="text-muted">{servidor.comunidade}</span>,
             categoria: <Badge color={GRAU_COLOR[servidor.categoria]}>{GRAU_LABEL[servidor.categoria]}</Badge>,
+            experiente: (
+              <ActionForm
+                action={alternarExperiente.bind(null, servidor.id)}
+                successMessage={servidor.experiente ? "Desmarcado como experiente." : "Marcado como experiente."}
+              >
+                <button
+                  type="submit"
+                  title="Clique para alternar"
+                  className={
+                    servidor.experiente
+                      ? "rounded-full bg-accent-soft px-2 py-0.5 text-[11px] font-medium text-accent ring-1 ring-inset ring-accent/30 transition-colors hover:bg-accent/20"
+                      : "rounded-full px-2 py-0.5 text-[11px] text-subtle ring-1 ring-inset ring-line transition-colors hover:text-muted"
+                  }
+                >
+                  {servidor.experiente ? "Experiente" : "Iniciante"}
+                </button>
+              </ActionForm>
+            ),
             missas: <span className="tabular-nums text-muted">{servidor.preferenciasMissas.length}</span>,
             acoes: (
               <div className="flex justify-end gap-4">

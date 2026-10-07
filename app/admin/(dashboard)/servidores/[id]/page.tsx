@@ -1,36 +1,34 @@
 import { notFound } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { pastoralDoPainel } from "@/lib/sessao";
+import { listarMissasDePreferencia } from "@/lib/missaPastoral";
+import { usaGraus } from "@/lib/constants";
 import { ServidorForm } from "@/components/ServidorForm";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { ActionForm } from "@/components/ui/ActionForm";
 import { getVinculosDoServidor } from "@/lib/servidorVinculo";
-import type { MissaOption, ServidorMissaPreferenciaRow, ServidorRow } from "@/lib/types";
+import type { ServidorMissaPreferenciaRow, ServidorRow } from "@/lib/types";
 import { updateServidor, saveServidorVinculos, atualizarFotoServidor } from "../actions";
 
 export const dynamic = "force-dynamic";
 
 export default async function EditarServidorPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const { paroquia, pastoral } = await pastoralDoPainel();
 
-  const [servidorResult, missasResult, outrosServidoresResult, vinculadosIdsLista] = await Promise.all([
+  const [servidorResult, missas, outrosServidoresResult, vinculadosIdsLista] = await Promise.all([
     supabase
       .from("Servidor")
       .select("*, preferenciasMissas:ServidorMissaPreferencia(*)")
       .eq("id", id)
+      .eq("pastoralId", pastoral.id)
       .returns<(ServidorRow & { preferenciasMissas: ServidorMissaPreferenciaRow[] })[]>()
       .maybeSingle(),
-    supabase
-      .from("Missa")
-      .select("*")
-      .eq("ativo", true)
-      .eq("escalarTodosAtivos", false)
-      .is("dataUnica", null)
-      .order("diaSemana", { ascending: true })
-      .order("horario", { ascending: true })
-      .returns<MissaOption[]>(),
+    listarMissasDePreferencia(paroquia.id, pastoral.id),
     supabase
       .from("Servidor")
       .select("id, nome")
+      .eq("pastoralId", pastoral.id)
       .eq("ativo", true)
       .neq("id", id)
       .order("nome", { ascending: true })
@@ -39,11 +37,9 @@ export default async function EditarServidorPage({ params }: { params: Promise<{
   ]);
 
   if (servidorResult.error) throw servidorResult.error;
-  if (missasResult.error) throw missasResult.error;
   if (outrosServidoresResult.error) throw outrosServidoresResult.error;
 
   const servidor = servidorResult.data;
-  const missas = missasResult.data ?? [];
   const outrosServidores = outrosServidoresResult.data ?? [];
 
   if (!servidor) notFound();
@@ -64,6 +60,8 @@ export default async function EditarServidorPage({ params }: { params: Promise<{
             missaIds: servidor.preferenciasMissas.map((p) => p.missaId),
           }}
           submitLabel="Salvar alterações"
+          usaGraus={usaGraus(pastoral.tipo)}
+          mostrarExperiente
         />
       </div>
 

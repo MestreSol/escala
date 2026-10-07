@@ -1,11 +1,13 @@
 import { notFound } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { pastoralDoPainel } from "@/lib/sessao";
+import { getConfigMissa } from "@/lib/missaPastoral";
 import { MissaForm } from "@/components/admin/MissaForm";
 import { DeleteButton } from "@/components/admin/DeleteButton";
 import { Input } from "@/components/ui/Field";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { ActionForm } from "@/components/ui/ActionForm";
-import { PRIORIDADE_LABEL, GRAU_LABEL } from "@/lib/constants";
+import { PRIORIDADE_LABEL, GRAU_LABEL, rotuloTodos, usaGraus } from "@/lib/constants";
 import type { FuncaoRow, MissaFuncaoRequisitoRow, MissaRow } from "@/lib/types";
 import { updateMissa, deleteMissa, saveMissaRequisitos } from "../actions";
 
@@ -13,15 +15,23 @@ export const dynamic = "force-dynamic";
 
 export default async function EditarMissaPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const { paroquia, pastoral } = await pastoralDoPainel();
 
-  const [missaResult, requisitosResult, funcoesResult] = await Promise.all([
-    supabase.from("Missa").select("*").eq("id", id).returns<MissaRow[]>().maybeSingle(),
+  const [missaResult, requisitosResult, funcoesResult, config] = await Promise.all([
+    supabase.from("Missa").select("*").eq("id", id).eq("paroquiaId", paroquia.id).returns<MissaRow[]>().maybeSingle(),
     supabase
       .from("MissaFuncaoRequisito")
       .select("*")
       .eq("missaId", id)
       .returns<MissaFuncaoRequisitoRow[]>(),
-    supabase.from("Funcao").select("*").eq("ativo", true).order("nome", { ascending: true }).returns<FuncaoRow[]>(),
+    supabase
+      .from("Funcao")
+      .select("*")
+      .eq("pastoralId", pastoral.id)
+      .eq("ativo", true)
+      .order("nome", { ascending: true })
+      .returns<FuncaoRow[]>(),
+    getConfigMissa(id, pastoral.id),
   ]);
 
   if (missaResult.error) throw missaResult.error;
@@ -46,21 +56,24 @@ export default async function EditarMissaPage({ params }: { params: Promise<{ id
           action={updateMissa.bind(null, missa.id)}
           defaultValues={{
             ...missa,
+            ...config,
             dataUnica: missa.dataUnica?.slice(0, 10) ?? null,
           }}
           submitLabel="Salvar alterações"
+          pastoral={{ nome: pastoral.nome, rotuloTodos: rotuloTodos(pastoral.tipo) }}
         />
       </div>
 
       <div>
-        <h2 className="mb-1 text-lg font-semibold text-fg">Funções exigidas nesta missa</h2>
+        <h2 className="mb-1 text-lg font-semibold text-fg">Funções exigidas nesta missa — {pastoral.nome}</h2>
         <p className="mb-4 text-sm text-muted">
-          Marque as funções que essa missa precisa e quantas vagas cada uma tem (ex: 2 ceroferários).
+          Marque as funções da sua pastoral que essa missa precisa e quantas vagas cada uma tem (ex: 2
+          ceroferários). Sem nenhuma marcada, a sua pastoral não serve nesta missa.
         </p>
 
-        {missa.escalarTodosAtivos ? (
+        {config.escalarTodosAtivos ? (
           <p className="rounded-md border border-line bg-surface-2 px-4 py-3 text-sm text-muted">
-            Essa missa está como &quot;Todos os coroinhas&quot; — não usa funções individuais. Na
+            Essa missa está como &quot;{rotuloTodos(pastoral.tipo)}&quot; — não usa funções individuais. Na
             tela de cada ocorrência, escale todo mundo de uma vez com um clique.
           </p>
         ) : funcoes.length === 0 ? (
@@ -83,7 +96,8 @@ export default async function EditarMissaPage({ params }: { params: Promise<{ id
                     />
                     <span className="text-sm font-medium text-fg">{funcao.nome}</span>
                     <span className="text-xs text-muted">
-                      {PRIORIDADE_LABEL[funcao.prioridade]} · {GRAU_LABEL[funcao.grauMinimo]}+
+                      {PRIORIDADE_LABEL[funcao.prioridade]}
+                      {usaGraus(pastoral.tipo) ? ` · ${GRAU_LABEL[funcao.grauMinimo]}+` : ""}
                     </span>
                   </label>
                   <Input
@@ -105,7 +119,7 @@ export default async function EditarMissaPage({ params }: { params: Promise<{ id
       <div className="border-t border-line pt-6">
         <DeleteButton
           action={deleteMissa.bind(null, missa.id)}
-          confirmMessage="Excluir esta missa? Isso também remove ocorrências e escalas geradas para ela."
+          confirmMessage="Excluir esta missa? Ela é da paróquia toda: isso remove as ocorrências e as escalas geradas para ela em todas as pastorais."
           label="Excluir missa"
         />
       </div>

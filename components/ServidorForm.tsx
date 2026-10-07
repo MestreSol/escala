@@ -17,8 +17,13 @@ type ServidorFormProps = {
     comunidade: string;
     categoria: string;
     missaIds: string[];
+    experiente?: boolean;
   };
   submitLabel: string;
+  /** Pastoral com hierarquia (coroinhas). Sem ela (ex: ministros), o campo de grau some. */
+  usaGraus: boolean;
+  /** Só no painel: a inscrição pública não deixa a pessoa se declarar experiente. */
+  mostrarExperiente?: boolean;
 };
 
 const HOJE = new Date().toISOString().slice(0, 10);
@@ -29,7 +34,14 @@ const GRAUS = [
   { value: "CERIMONIARIO", label: "Cerimoniário", descricao: "Também pode exercer funções de acólito e coroinha." },
 ];
 
-export function ServidorForm({ action, missas, defaultValues, submitLabel }: ServidorFormProps) {
+export function ServidorForm({
+  action,
+  missas,
+  defaultValues,
+  submitLabel,
+  usaGraus,
+  mostrarExperiente = false,
+}: ServidorFormProps) {
   const [state, formAction, pending] = useActionState(action, {});
   useActionToast(state, pending, "Servidor salvo.");
   const missaIdsSelecionadas = new Set(defaultValues?.missaIds ?? []);
@@ -80,28 +92,47 @@ export function ServidorForm({ action, missas, defaultValues, submitLabel }: Ser
         )}
       </div>
 
-      <div>
-        <Label>Categoria</Label>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          {GRAUS.map((grau) => (
-            <label
-              key={grau.value}
-              className="relative flex cursor-pointer flex-col gap-1 rounded-xl border border-line bg-surface p-3 text-sm transition-colors hover:border-accent/50 has-[:checked]:border-accent has-[:checked]:bg-accent-soft has-[:checked]:ring-1 has-[:checked]:ring-accent/40"
-            >
-              <input
-                type="radio"
-                name="categoria"
-                value={grau.value}
-                defaultChecked={(defaultValues?.categoria ?? "COROINHA") === grau.value}
-                className="absolute right-3 top-3 h-4 w-4 border-line-strong text-accent focus:ring-accent/40"
-                required
-              />
-              <span className="pr-6 font-medium text-fg">{grau.label}</span>
-              <span className="text-xs text-muted">{grau.descricao}</span>
-            </label>
-          ))}
+      {usaGraus ? (
+        <div>
+          <Label>Categoria</Label>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            {GRAUS.map((grau) => (
+              <label
+                key={grau.value}
+                className="relative flex cursor-pointer flex-col gap-1 rounded-xl border border-line bg-surface p-3 text-sm transition-colors hover:border-accent/50 has-[:checked]:border-accent has-[:checked]:bg-accent-soft has-[:checked]:ring-1 has-[:checked]:ring-accent/40"
+              >
+                <input
+                  type="radio"
+                  name="categoria"
+                  value={grau.value}
+                  defaultChecked={(defaultValues?.categoria ?? "COROINHA") === grau.value}
+                  className="absolute right-3 top-3 h-4 w-4 border-line-strong text-accent focus:ring-accent/40"
+                  required
+                />
+                <span className="pr-6 font-medium text-fg">{grau.label}</span>
+                <span className="text-xs text-muted">{grau.descricao}</span>
+              </label>
+            ))}
+          </div>
         </div>
-      </div>
+      ) : null}
+
+      {mostrarExperiente ? (
+        <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-line bg-surface p-3 text-sm transition-colors hover:border-accent/50 has-[:checked]:border-accent has-[:checked]:bg-accent-soft">
+          <input
+            type="checkbox"
+            name="experiente"
+            defaultChecked={defaultValues?.experiente ?? false}
+            className="mt-0.5 h-4 w-4"
+          />
+          <span>
+            <span className="block font-medium text-fg">Experiente</span>
+            <span className="block text-xs text-muted">
+              Nas funções em dupla ou em par, a escala junta sempre um experiente com um inexperiente.
+            </span>
+          </span>
+        </label>
+      ) : null}
 
       <div>
         <Label>Missas que prefiro servir</Label>
@@ -134,7 +165,7 @@ export function ServidorForm({ action, missas, defaultValues, submitLabel }: Ser
       </div>
 
       {/* Armadilha pra robô de spam: invisível e fora do Tab, gente não preenche
-          (ver createServidor em app/inscricao/actions.ts). */}
+          (ver createServidor em app/[paroquia]/inscricao/actions.ts). */}
       <div aria-hidden className="absolute -left-[9999px] h-px w-px overflow-hidden">
         <label htmlFor="site">Não preencha este campo</label>
         <input id="site" name="site" type="text" tabIndex={-1} autoComplete="off" defaultValue="" />

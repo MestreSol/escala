@@ -2,11 +2,11 @@ export type Grau = "COROINHA" | "ACOLITO" | "CERIMONIARIO";
 export type Prioridade = "ALTA" | "MEDIA" | "BAIXA";
 /**
  * Como a missa dessa vaga escolhe candidatos (ver Missa.dataUnica e
- * Missa.comunidadeResponsavel no schema — "missas grandes", ex: Natal):
+ * MissaPastoral.comunidadeResponsavel no schema — "missas grandes", ex: Natal):
  * NORMAL = preferência de missa de cada servidor (missas semanais);
  * TODOS_ATIVOS = qualquer servidor ativo, grau ainda respeitado (data única);
  * COMUNIDADE = só servidores de ServidorCandidato.comunidade === comunidadeResponsavel.
- * Missas "Todos os coroinhas" (Missa.escalarTodosAtivos) não passam pelo
+ * Missas "Todos os coroinhas" (MissaPastoral.escalarTodosAtivos) não passam pelo
  * gerador: não têm vagas por função, só a lista de presença.
  */
 export type ModoEscalacao = "NORMAL" | "TODOS_ATIVOS" | "COMUNIDADE";
@@ -44,6 +44,11 @@ export type ServidorCandidato = {
    * isso EXCLUI o servidor de qualquer vaga nesse dia, sem exceção.
    */
   diasIndisponiveis?: Set<string>;
+  /**
+   * Já serve há mais tempo. Nas vagas em dupla/par (ver `paresDeFuncoes`), o
+   * gerador junta um experiente com um inexperiente — ver `ajustarPelaExperiencia`.
+   */
+  experiente?: boolean;
 };
 
 export type AtribuicaoGerada = {
@@ -81,6 +86,8 @@ export type GerarEscalaOptions = {
   atribuicoesExistentes?: Array<{
     ocorrenciaId: string;
     funcaoId: string;
+    /** Vaga dentro da função; sem ela a atribuição não entra na regra de dupla. */
+    slotIndex?: number;
     servidorId: string | null;
     data: Date;
   }>;
@@ -90,6 +97,12 @@ export type GerarEscalaOptions = {
    * forem — senão, nenhum do grupo serve naquela ocorrência.
    */
   vinculos?: Map<string, string[]>;
+  /**
+   * Pares de funções DIFERENTES que trabalham juntas (ex: Turiferário e
+   * Naveteiro): a vaga #N de uma faz dupla com a vaga #N da outra. Funções
+   * com 2+ vagas na mesma missa já formam duplas entre si (#1 com #2...).
+   */
+  paresDeFuncoes?: [string, string][];
 };
 
 type UnidadeParaPreencher = {
@@ -171,6 +184,38 @@ function agruparPorOcorrencia(slots: SlotParaPreencher[]): Map<string, SlotParaP
   return grupos;
 }
 
+const chaveVaga = (funcaoId: string, slotIndex: number) => `${funcaoId}:${slotIndex}`;
+
+/**
+ * Qual vaga faz dupla com qual, dentro de uma ocorrência. Primeiro as vagas
+ * da mesma função (#1 com #2, #3 com #4...); depois os pares de funções
+ * diferentes (#N de uma com #N da outra), só entre vagas ainda sem dupla.
+ */
+function montarDuplas(
+  vagasPorFuncao: Map<string, number[]>,
+  paresDeFuncoes: [string, string][]
+): Map<string, string> {
+  const parceiro = new Map<string, string>();
+  const ligar = (a: string, b: string) => {
+    parceiro.set(a, b);
+    parceiro.set(b, a);
+  };
+
+  for (const [funcaoId, indices] of vagasPorFuncao) {
+    for (let i = 0; i + 1 < indices.length; i += 2) {
+      ligar(chaveVaga(funcaoId, indices[i]), chaveVaga(funcaoId, indices[i + 1]));
+    }
+  }
+
+  for (const [funcaoA, funcaoB] of paresDeFuncoes) {
+    const livresA = (vagasPorFuncao.get(funcaoA) ?? []).map((i) => chaveVaga(funcaoA, i)).filter((k) => !parceiro.has(k));
+    const livresB = (vagasPorFuncao.get(funcaoB) ?? []).map((i) => chaveVaga(funcaoB, i)).filter((k) => !parceiro.has(k));
+    for (let i = 0; i < Math.min(livresA.length, livresB.length); i++) ligar(livresA[i], livresB[i]);
+  }
+
+  return parceiro;
+}
+
 /**
  * Agrupa os slots de uma ocorrência por função (todas as vagas de uma mesma
  * função ficam numa única "unidade"), e ordena as unidades por prioridade da
@@ -248,6 +293,14 @@ function montarUnidades(slots: SlotParaPreencher[], funcoesAtomicas: Set<string>
  * de prioridade: só é escolhido quando não sobra mais ninguém com frequência
  * normal disputando a mesma vaga.
  *
+ * Vagas em dupla (mesma função com 2+ vagas, ou pares de `paresDeFuncoes`)
+ * juntam um experiente com um inexperiente (`ServidorCandidato.experiente`):
+ * sem inexperiente disponível vão dois experientes, mas nunca uma dupla só
+ * de inexperientes — aí a vaga fica em aberto. A regra só vale enquanto
+ * houver experientes E inexperientes entre os servidores (ninguém marcado, ou
+ * todos experientes, = sem efeito). O pré-passo de vínculos (irmãos) não
+ * olha experiência; as vagas parceiras dele se ajustam depois.
+ *
  * Dias que o próprio servidor avisou como indisponível (`diasIndisponiveis`,
  * ver lib/servidorIndisponibilidade.ts — tela pública onde ele marca isso)
  * excluem o servidor de qualquer vaga naquele dia, sem exceção — diferente
@@ -263,11 +316,17 @@ export function gerarEscala(
   const funcoesAtomicas = options.funcoesAtomicas ?? new Set<string>();
   const servidorPorId = new Map(servidores.map((s) => [s.id, s]));
   const gruposVinculo = calcularGruposVinculo(options.vinculos ?? new Map());
+  const paresDeFuncoes = options.paresDeFuncoes ?? [];
+  const regraDeExperienciaAtiva =
+    servidores.some((s) => s.experiente) && servidores.some((s) => !s.experiente);
 
   const contagemTotal = new Map<string, number>(Object.entries(options.contagemInicial ?? {}));
   const ultimaFuncao = new Map<string, string>();
 
-  const existentesPorOcorrencia = new Map<string, Array<{ funcaoId: string; servidorId: string }>>();
+  const existentesPorOcorrencia = new Map<
+    string,
+    Array<{ funcaoId: string; slotIndex?: number; servidorId: string }>
+  >();
   // diaChave -> servidores já escalados em alguma missa desse dia (qualquer
   // função, qualquer prioridade). Quem está aqui não entra em outra missa do
   // mesmo dia.
@@ -283,7 +342,7 @@ export function gerarEscala(
   for (const a of options.atribuicoesExistentes ?? []) {
     if (!a.servidorId) continue;
     const lista = existentesPorOcorrencia.get(a.ocorrenciaId);
-    const entrada = { funcaoId: a.funcaoId, servidorId: a.servidorId };
+    const entrada = { funcaoId: a.funcaoId, slotIndex: a.slotIndex, servidorId: a.servidorId };
     if (lista) lista.push(entrada);
     else existentesPorOcorrencia.set(a.ocorrenciaId, [entrada]);
     marcarUsoNoDia(a.servidorId, a.data);
@@ -315,10 +374,41 @@ export function gerarEscala(
     const usadosNaOcorrencia = new Set<string>();
     const assignadoPorFuncao = new Map<string, string>();
     const pendentes: SlotParaPreencher[] = [];
+    const ocupantePorVaga = new Map<string, string>();
+    const vagasPorFuncao = new Map<string, number[]>();
+    const anotarVaga = (funcaoId: string, slotIndex: number) => {
+      const lista = vagasPorFuncao.get(funcaoId) ?? [];
+      if (!lista.includes(slotIndex)) lista.push(slotIndex);
+      vagasPorFuncao.set(funcaoId, lista);
+    };
 
     for (const existente of existentesPorOcorrencia.get(ocorrenciaId) ?? []) {
       usadosNaOcorrencia.add(existente.servidorId);
       assignadoPorFuncao.set(existente.funcaoId, existente.servidorId);
+      if (existente.slotIndex !== undefined) {
+        ocupantePorVaga.set(chaveVaga(existente.funcaoId, existente.slotIndex), existente.servidorId);
+        anotarVaga(existente.funcaoId, existente.slotIndex);
+      }
+    }
+    for (const slot of slotsDaOcorrenciaBrutos) anotarVaga(slot.funcaoId, slot.slotIndex);
+    for (const indices of vagasPorFuncao.values()) indices.sort((a, b) => a - b);
+    const parceiroDaVaga = regraDeExperienciaAtiva
+      ? montarDuplas(vagasPorFuncao, paresDeFuncoes)
+      : new Map<string, string>();
+
+    /**
+     * Regra de dupla: parceiro já escalado e experiente → prefere inexperiente
+     * (senão qualquer um); parceiro inexperiente → só experiente (pode sobrar
+     * ninguém = vaga em aberto); parceiro ainda vazio → prefere experiente.
+     */
+    function ajustarPelaExperiencia(candidatos: ServidorCandidato[], slot: SlotParaPreencher): ServidorCandidato[] {
+      const parceiro = parceiroDaVaga.get(chaveVaga(slot.funcaoId, slot.slotIndex));
+      if (!parceiro) return candidatos;
+      const ocupante = ocupantePorVaga.get(parceiro);
+      const ocupanteExperiente = ocupante ? servidorPorId.get(ocupante)?.experiente : undefined;
+      if (ocupante && ocupanteExperiente === false) return candidatos.filter((c) => c.experiente);
+      const preferidos = candidatos.filter((c) => (ocupante ? !c.experiente : c.experiente));
+      return preferidos.length > 0 ? preferidos : candidatos;
     }
 
     // Pré-passo de vínculos (ex: irmãos): ou o grupo inteiro é escalado
@@ -396,6 +486,7 @@ export function gerarEscala(
           ultimaFuncao.set(servidorId, slot.funcaoId);
           usadosNaOcorrencia.add(servidorId);
           assignadoPorFuncao.set(slot.funcaoId, servidorId);
+          ocupantePorVaga.set(chaveVaga(slot.funcaoId, slot.slotIndex), servidorId);
           marcarUsoNoDia(servidorId, slot.data);
 
           const unidadeDoSlot = unidades.find((u) => u.slots.includes(slot));
@@ -414,13 +505,16 @@ export function gerarEscala(
 
       if (!unidade.atomica) {
         for (const slot of unidade.slots) {
-          const candidatos = servidores.filter(
-            (s) =>
-              elegivelParaMissa(s, slot) &&
-              grauCompativel(s, slot.grauMinimo) &&
-              !usadosNaOcorrencia.has(s.id) &&
-              !usadosNoDia.get(diaChave(slot.data))?.has(s.id) &&
-              disponivelNoDia(s, slot.data)
+          const candidatos = ajustarPelaExperiencia(
+            servidores.filter(
+              (s) =>
+                elegivelParaMissa(s, slot) &&
+                grauCompativel(s, slot.grauMinimo) &&
+                !usadosNaOcorrencia.has(s.id) &&
+                !usadosNoDia.get(diaChave(slot.data))?.has(s.id) &&
+                disponivelNoDia(s, slot.data)
+            ),
+            slot
           );
 
           if (candidatos.length === 0) {
@@ -440,6 +534,7 @@ export function gerarEscala(
           ultimaFuncao.set(vencedor.id, slot.funcaoId);
           usadosNaOcorrencia.add(vencedor.id);
           assignadoPorFuncao.set(slot.funcaoId, vencedor.id);
+          ocupantePorVaga.set(chaveVaga(slot.funcaoId, slot.slotIndex), vencedor.id);
           marcarUsoNoDia(vencedor.id, slot.data);
         }
         continue;
@@ -468,10 +563,36 @@ export function gerarEscala(
         continue;
       }
 
+      // Escolhe todas as vagas antes de gravar: se a regra de dupla deixar
+      // alguma sem candidato, a unidade inteira fica em aberto (tudo ou nada).
       const poolDisponivel = [...candidatosBase];
+      const escolhidos: { slot: SlotParaPreencher; servidor: ServidorCandidato }[] = [];
       for (const slot of unidade.slots) {
-        const vencedor = escolherVencedor(poolDisponivel, slot.funcaoId);
+        const candidatos = ajustarPelaExperiencia(poolDisponivel, slot);
+        if (candidatos.length === 0) break;
+        const vencedor = escolherVencedor(candidatos, slot.funcaoId);
+        escolhidos.push({ slot, servidor: vencedor });
+        ocupantePorVaga.set(chaveVaga(slot.funcaoId, slot.slotIndex), vencedor.id);
+        poolDisponivel.splice(
+          poolDisponivel.findIndex((c) => c.id === vencedor.id),
+          1
+        );
+      }
 
+      if (escolhidos.length < unidade.slots.length) {
+        for (const { slot } of escolhidos) ocupantePorVaga.delete(chaveVaga(slot.funcaoId, slot.slotIndex));
+        for (const slot of unidade.slots) {
+          resultado.push({
+            ocorrenciaId: slot.ocorrenciaId,
+            funcaoId: slot.funcaoId,
+            slotIndex: slot.slotIndex,
+            servidorId: null,
+          });
+        }
+        continue;
+      }
+
+      for (const { slot, servidor: vencedor } of escolhidos) {
         resultado.push({
           ocorrenciaId: slot.ocorrenciaId,
           funcaoId: slot.funcaoId,
@@ -483,9 +604,6 @@ export function gerarEscala(
         usadosNaOcorrencia.add(vencedor.id);
         assignadoPorFuncao.set(slot.funcaoId, vencedor.id);
         marcarUsoNoDia(vencedor.id, slot.data);
-
-        const indice = poolDisponivel.findIndex((c) => c.id === vencedor.id);
-        poolDisponivel.splice(indice, 1);
       }
     }
 
@@ -497,7 +615,11 @@ export function gerarEscala(
         const candidatoId = assignadoPorFuncao.get(funcaoBaseId);
         if (!candidatoId) continue;
         const candidato = servidorPorId.get(candidatoId);
-        if (candidato && grauCompativel(candidato, slot.grauMinimo)) {
+        if (
+          candidato &&
+          grauCompativel(candidato, slot.grauMinimo) &&
+          ajustarPelaExperiencia([candidato], slot).length > 0
+        ) {
           acumuladorId = candidatoId;
           break;
         }
@@ -511,6 +633,7 @@ export function gerarEscala(
       });
 
       if (acumuladorId) {
+        ocupantePorVaga.set(chaveVaga(slot.funcaoId, slot.slotIndex), acumuladorId);
         contagemTotal.set(acumuladorId, (contagemTotal.get(acumuladorId) ?? 0) + 1);
         ultimaFuncao.set(acumuladorId, slot.funcaoId);
         marcarUsoNoDia(acumuladorId, slot.data);

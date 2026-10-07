@@ -9,10 +9,11 @@ export const LIMIAR_FREQUENCIA = 0.7;
 export type FrequenciaServidor = { presentes: number; faltas: number; total: number; taxa: number };
 
 /** Contagem de presença por servidor, considerando só atribuições com presença já registrada. */
-export async function getFrequenciaPorServidor(): Promise<Map<string, FrequenciaServidor>> {
+export async function getFrequenciaPorServidor(pastoralId: string): Promise<Map<string, FrequenciaServidor>> {
   const { data, error } = await supabase
     .from("EscalaAtribuicao")
     .select("servidorId, presente")
+    .eq("pastoralId", pastoralId)
     .not("servidorId", "is", null)
     .not("presente", "is", null)
     .returns<{ servidorId: string; presente: boolean }[]>();
@@ -36,8 +37,8 @@ export async function getFrequenciaPorServidor(): Promise<Map<string, Frequencia
  * no gerador de escala (ver `frequenciaBaixa` em lib/scheduleGenerator.ts).
  * Exige um mínimo de registros pra não penalizar quem faltou 1 de 1.
  */
-export async function getServidoresComFrequenciaBaixa(): Promise<Set<string>> {
-  const frequencias = await getFrequenciaPorServidor();
+export async function getServidoresComFrequenciaBaixa(pastoralId: string): Promise<Set<string>> {
+  const frequencias = await getFrequenciaPorServidor(pastoralId);
   const baixaFrequencia = new Set<string>();
   for (const [servidorId, { total, taxa }] of frequencias) {
     if (total >= MINIMO_REGISTROS_FREQUENCIA && taxa < LIMIAR_FREQUENCIA) {

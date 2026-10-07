@@ -1,6 +1,8 @@
 "use server";
 
-import { exigirUsuario } from "@/lib/sessao";
+import { cuidaDaParoquiaToda, exigirPastoral } from "@/lib/sessao";
+import { garantirDaParoquia } from "@/lib/paroquia";
+import { missaUsadaPorOutraPastoral, setConfigMissa, type ConfigMissaPastoral } from "@/lib/missaPastoral";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { supabase } from "@/lib/supabase";
@@ -40,9 +42,8 @@ function parseMissaForm(formData: FormData) {
   });
 }
 
+/** Campos da missa em si — compartilhados por todas as pastorais da paróquia. */
 function paraLinhaDb(dados: MissaInput) {
-  const escalarTodosAtivos = dados.modoEscalacao === "LISTA_TODOS";
-
   if (dados.tipo === "DATA_UNICA") {
     return {
       diaSemana: null,
@@ -50,8 +51,6 @@ function paraLinhaDb(dados: MissaInput) {
       dataUnica: parseDataUnica(dados.dataUnica).toISOString(),
       horario: dados.horario,
       comunidade: dados.comunidade,
-      escalarTodosAtivos,
-      comunidadeResponsavel: dados.modoEscalacao === "COMUNIDADE" ? dados.comunidadeResponsavel : null,
     };
   }
 
@@ -61,13 +60,20 @@ function paraLinhaDb(dados: MissaInput) {
     dataUnica: null,
     horario: dados.horario,
     comunidade: dados.comunidade,
-    escalarTodosAtivos,
-    comunidadeResponsavel: null,
+  };
+}
+
+/** "Quem serve" — vale só para a pastoral de quem está salvando (ver MissaPastoral). */
+function paraConfigDaPastoral(dados: MissaInput): ConfigMissaPastoral {
+  return {
+    escalarTodosAtivos: dados.modoEscalacao === "LISTA_TODOS",
+    comunidadeResponsavel:
+      dados.tipo === "DATA_UNICA" && dados.modoEscalacao === "COMUNIDADE" ? (dados.comunidadeResponsavel ?? null) : null,
   };
 }
 
 export async function createMissa(_prevState: MissaFormState, formData: FormData): Promise<MissaFormState> {
-  await exigirUsuario();
+  const { paroquiaId, pastoralId } = await exigirPastoral();
   const parsed = parseMissaForm(formData);
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
@@ -76,8 +82,9 @@ export async function createMissa(_prevState: MissaFormState, formData: FormData
   const id = generateId();
   const { error } = await supabase
     .from("Missa")
-    .insert({ id, ...paraLinhaDb(parsed.data), updatedAt: nowIso() });
+    .insert({ id, paroquiaId, ...paraLinhaDb(parsed.data), updatedAt: nowIso() });
   if (error) return erroDoBanco(error, "missa");
+  await setConfigMissa(id, pastoralId, paraConfigDaPastoral(parsed.data));
 
   revalidatePath("/admin/missas");
   redirect(`/admin/missas/${id}`);
@@ -88,7 +95,8 @@ export async function updateMissa(
   _prevState: MissaFormState,
   formData: FormData
 ): Promise<MissaFormState> {
-  await exigirUsuario();
+  const { paroquiaId, pastoralId } = await exigirPastoral();
+  await garantirDaParoquia("Missa", id, paroquiaId);
   const parsed = parseMissaForm(formData);
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
@@ -97,8 +105,10 @@ export async function updateMissa(
   const { error } = await supabase
     .from("Missa")
     .update({ ...paraLinhaDb(parsed.data), updatedAt: nowIso() })
-    .eq("id", id);
+    .eq("id", id)
+    .eq("paroquiaId", paroquiaId);
   if (error) return erroDoBanco(error, "missa");
+  await setConfigMissa(id, pastoralId, paraConfigDaPastoral(parsed.data));
 
   revalidatePath("/admin/missas");
   revalidatePath(`/admin/missas/${id}`);
@@ -106,8 +116,13 @@ export async function updateMissa(
 }
 
 export async function deleteMissa(id: string) {
-  await exigirUsuario();
-  const { error } = await supabase.from("Missa").delete().eq("id", id);
+  const { usuario, paroquiaId, pastoralId } = await exigirPastoral();
+  await garantirDaParoquia("Missa", id, paroquiaId);
+  // A missa é da paróquia: excluir apaga também a escala das outras pastorais.
+  if (!cuidaDaParoquiaToda(usuario) && (await missaUsadaPorOutraPastoral(id, pastoralId))) {
+    throw new Error("Outra pastoral também serve nesta missa. Só o administrador da paróquia pode excluí-la.");
+  }
+  const { error } = await supabase.from("Missa").delete().eq("id", id).eq("paroquiaId", paroquiaId);
   if (error) throw error;
 
   revalidatePath("/admin/missas");
@@ -115,10 +130,14 @@ export async function deleteMissa(id: string) {
 }
 
 export async function saveMissaRequisitos(missaId: string, formData: FormData) {
-  await exigirUsuario();
+  const { paroquiaId, pastoralId } = await exigirPastoral();
+  await garantirDaParoquia("Missa", missaId, paroquiaId);
+  // Só as funções desta pastoral: as exigências das outras pastorais na
+  // mesma missa ficam intocadas.
   const { data: funcoes, error: funcoesError } = await supabase
     .from("Funcao")
     .select("id")
+    .eq("pastoralId", pastoralId)
     .eq("ativo", true)
     .returns<{ id: string }[]>();
   if (funcoesError) throw funcoesError;
@@ -127,6 +146,7 @@ export async function saveMissaRequisitos(missaId: string, formData: FormData) {
     .from("MissaFuncaoRequisito")
     .select("id, funcaoId")
     .eq("missaId", missaId)
+    .in("funcaoId", (funcoes ?? []).map((f) => f.id))
     .returns<{ id: string; funcaoId: string }[]>();
   if (existentesError) throw existentesError;
 

@@ -1,6 +1,12 @@
 import { ReactNode } from "react";
 import { redirect } from "next/navigation";
-import { obterUsuarioAtual } from "@/lib/sessao";
+import {
+  cuidaDaParoquiaToda,
+  obterParoquiaAtual,
+  obterPastoralAtual,
+  obterUsuarioAtual,
+  podeGerenciarUsuarios,
+} from "@/lib/sessao";
 import { NavLink } from "@/components/admin/NavLink";
 import { logout } from "../login/actions";
 
@@ -13,12 +19,23 @@ const NAV_ITEMS = [
   { href: "/admin/acompanhamento", label: "Acompanhamento" },
   { href: "/admin/aniversariantes", label: "Aniversariantes" },
 ];
+const PRESENCA_ITEM = { href: "/admin/presenca", label: "Presença do dia" };
 
 export default async function AdminLayout({ children }: { children: ReactNode }) {
   const usuarioLogado = await obterUsuarioAtual();
   if (!usuarioLogado) redirect("/admin/login");
+  const [paroquia, pastoral] = await Promise.all([obterParoquiaAtual(), obterPastoralAtual()]);
+  // PRESENCA só registra a presença nas missas do dia — nada mais do painel.
   const navItems =
-    usuarioLogado?.papel === "ADMIN" ? [...NAV_ITEMS, { href: "/admin/usuarios", label: "Usuários" }] : NAV_ITEMS;
+    usuarioLogado.papel === "PRESENCA"
+      ? [PRESENCA_ITEM]
+      : [
+          ...NAV_ITEMS,
+          PRESENCA_ITEM,
+          ...(podeGerenciarUsuarios(usuarioLogado) ? [{ href: "/admin/usuarios", label: "Usuários" }] : []),
+          ...(cuidaDaParoquiaToda(usuarioLogado) && paroquia ? [{ href: "/admin/pastorais", label: "Pastorais" }] : []),
+          ...(usuarioLogado.papel === "SUPERADMIN" ? [{ href: "/admin/paroquias", label: "Paróquias" }] : []),
+        ];
 
   return (
     <div className="flex min-h-screen flex-col bg-bg md:flex-row">
@@ -27,7 +44,14 @@ export default async function AdminLayout({ children }: { children: ReactNode })
           <span aria-hidden className="text-lg leading-none text-accent">✠</span>
           <div>
             <p className="text-sm font-semibold tracking-tight text-fg">Escala</p>
-            <p className="text-[11px] uppercase tracking-wider text-subtle">Administração</p>
+            <p className="max-w-40 truncate text-[11px] uppercase tracking-wider text-subtle">
+              {paroquia?.nome ?? "Administração"}
+            </p>
+            {pastoral ? (
+              <p className="max-w-40 truncate text-[11px] font-medium uppercase tracking-wider text-accent">
+                {pastoral.nome}
+              </p>
+            ) : null}
           </div>
           <form action={logout} className="ml-auto md:hidden">
             <button type="submit" className="text-sm text-muted transition-colors hover:text-fg">

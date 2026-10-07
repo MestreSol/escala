@@ -1,6 +1,7 @@
 import { supabase } from "@/lib/supabase";
 import { PRIORIDADE_ORDEM } from "@/lib/constants";
 import { lerDataArmazenada, paraExibicao } from "@/lib/occurrences";
+import { CONFIG_PADRAO, getConfigMissasMap, getMissasDaPastoral } from "@/lib/missaPastoral";
 import type { EscalaAtribuicaoRow, FuncaoRow, MissaOcorrenciaRow, MissaRow, ServidorRow } from "@/lib/types";
 
 export type LinhaEscala = {
@@ -16,7 +17,7 @@ export type OcorrenciaEscala = {
   data: Date;
   comunidade: string;
   /**
-   * Missa "todos os ativos": na escala aparece só "TODOS OS COROINHAS", sem
+   * Missa "todos os ativos": na escala aparece só "TODOS OS COROINHAS" (ou ministros), sem
    * listar nome por nome (a lista individual serve só pra presença no admin).
    * Nesse caso `linhas` vem vazio.
    */
@@ -29,18 +30,39 @@ type OcorrenciaComAtribuicoes = MissaOcorrenciaRow & {
   atribuicoes: (EscalaAtribuicaoRow & { funcao: FuncaoRow | null; servidor: ServidorRow | null })[];
 };
 
-export async function buscarEscalaDoPeriodo(periodoInicio: Date, periodoFim: Date): Promise<OcorrenciaEscala[]> {
-  const { data, error } = await supabase
-    .from("MissaOcorrencia")
-    .select("*, missa:Missa(*), atribuicoes:EscalaAtribuicao(*, funcao:Funcao(*), servidor:Servidor(*))")
-    .gte("data", periodoInicio.toISOString())
-    .lte("data", periodoFim.toISOString())
-    .order("data", { ascending: true })
-    .returns<OcorrenciaComAtribuicoes[]>();
+/**
+ * Escala de UMA pastoral no período: as ocorrências são da paróquia, mas só
+ * entram as missas em que a pastoral serve, e só com as vagas dela.
+ */
+export async function buscarEscalaDoPeriodo(
+  paroquiaId: string,
+  pastoralId: string,
+  periodoInicio: Date,
+  periodoFim: Date
+): Promise<OcorrenciaEscala[]> {
+  const [{ data, error }, configs, missasDaPastoral] = await Promise.all([
+    supabase
+      .from("MissaOcorrencia")
+      .select("*, missa:Missa(*), atribuicoes:EscalaAtribuicao(*, funcao:Funcao(*), servidor:Servidor(*))")
+      .eq("paroquiaId", paroquiaId)
+      .gte("data", periodoInicio.toISOString())
+      .lte("data", periodoFim.toISOString())
+      .order("data", { ascending: true })
+      .returns<OcorrenciaComAtribuicoes[]>(),
+    getConfigMissasMap(pastoralId),
+    getMissasDaPastoral(pastoralId),
+  ]);
   if (error) throw error;
 
-  return (data ?? []).map((ocorrencia) => {
-    if (ocorrencia.missa.escalarTodosAtivos) {
+  const ocorrencias = (data ?? [])
+    .map((ocorrencia) => ({
+      ...ocorrencia,
+      atribuicoes: ocorrencia.atribuicoes.filter((a) => a.pastoralId === pastoralId),
+    }))
+    .filter((ocorrencia) => missasDaPastoral.has(ocorrencia.missaId) || ocorrencia.atribuicoes.length > 0);
+
+  return ocorrencias.map((ocorrencia) => {
+    if ((configs.get(ocorrencia.missaId) ?? CONFIG_PADRAO).escalarTodosAtivos) {
       return {
         id: ocorrencia.id,
         data: paraExibicao(lerDataArmazenada(ocorrencia.data)),

@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { supabase } from "@/lib/supabase";
+import { pastoralDoPainel } from "@/lib/sessao";
+import { getConfigMissa } from "@/lib/missaPastoral";
 import { Badge } from "@/components/ui/Badge";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
@@ -40,6 +42,7 @@ export default async function OcorrenciaDetailPage({
   params: Promise<{ ocorrenciaId: string }>;
 }) {
   const { ocorrenciaId } = await params;
+  const { paroquia, pastoral } = await pastoralDoPainel();
 
   const [ocorrenciaResult, servidoresResult] = await Promise.all([
     supabase
@@ -48,18 +51,34 @@ export default async function OcorrenciaDetailPage({
         "*, missa:Missa(*, funcoesRequisito:MissaFuncaoRequisito(*, funcao:Funcao(*))), atribuicoes:EscalaAtribuicao(*, servidor:Servidor(*))"
       )
       .eq("id", ocorrenciaId)
+      .eq("paroquiaId", paroquia.id)
       .returns<OcorrenciaComDetalhes[]>()
       .maybeSingle(),
-    supabase.from("Servidor").select("*").eq("ativo", true).order("nome", { ascending: true }).returns<ServidorRow[]>(),
+    supabase
+      .from("Servidor")
+      .select("*")
+      .eq("pastoralId", pastoral.id)
+      .eq("ativo", true)
+      .order("nome", { ascending: true })
+      .returns<ServidorRow[]>(),
   ]);
 
   if (ocorrenciaResult.error) throw ocorrenciaResult.error;
   if (servidoresResult.error) throw servidoresResult.error;
 
-  const ocorrencia = ocorrenciaResult.data;
   const servidores = servidoresResult.data ?? [];
+  if (!ocorrenciaResult.data) notFound();
 
-  if (!ocorrencia) notFound();
+  // A ocorrência é da paróquia; aqui só entram as vagas e atribuições desta pastoral.
+  const ocorrencia: OcorrenciaComDetalhes = {
+    ...ocorrenciaResult.data,
+    missa: {
+      ...ocorrenciaResult.data.missa,
+      funcoesRequisito: ocorrenciaResult.data.missa.funcoesRequisito.filter((r) => r.funcao.pastoralId === pastoral.id),
+    },
+    atribuicoes: ocorrenciaResult.data.atribuicoes.filter((a) => a.pastoralId === pastoral.id),
+  };
+  const config = await getConfigMissa(ocorrencia.missaId, pastoral.id);
 
   const dataOcorrencia = paraExibicao(lerDataArmazenada(ocorrencia.data));
   const mesAno = format(dataOcorrencia, "eeee, d 'de' MMMM 'de' yyyy", { locale: ptBR });
@@ -73,9 +92,11 @@ export default async function OcorrenciaDetailPage({
         {formatarDiaMissa(ocorrencia.missa)} — {format(dataOcorrencia, "HH:mm")}
       </h1>
       <p className="mb-1 text-sm text-muted capitalize">{mesAno}</p>
-      <p className="mb-6 text-sm text-muted">Comunidade: {ocorrencia.missa.comunidade}</p>
+      <p className="mb-6 text-sm text-muted">
+        Comunidade: {ocorrencia.missa.comunidade} · {pastoral.nome}
+      </p>
 
-      {ocorrencia.missa.escalarTodosAtivos ? (
+      {config.escalarTodosAtivos ? (
         <ListaTodosAtivos ocorrencia={ocorrencia} servidores={servidores} />
       ) : (
         <ListaPorFuncao ocorrencia={ocorrencia} servidores={servidores} />
@@ -113,7 +134,7 @@ function ListaPorFuncao({
     );
 
   if (linhas.length === 0) {
-    return <p className="text-sm text-muted">Esta missa não tem funções configuradas.</p>;
+    return <p className="text-sm text-muted">Esta missa não tem funções desta pastoral configuradas.</p>;
   }
 
   return (

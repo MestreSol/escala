@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { SESSION_COOKIE_NAME, verificarSessionToken } from "@/lib/auth";
 
 /**
- * Protege as PÁGINAS do painel (/admin/*): sem sessão válida, manda pro login.
+ * Protege as PÁGINAS do painel (/admin/*): sem sessão válida, manda pro login;
+ * o PRESENCA só entra em /admin/presenca (inclui as rotas de imagem/PDF da escala).
  * Não protege Server Actions — cada action confere o usuário de novo (ver
  * exigirUsuario em lib/sessao.ts).
  */
@@ -20,6 +21,10 @@ export async function proxy(request: NextRequest) {
     const loginUrl = new URL("/admin/login", request.url);
     loginUrl.searchParams.set("from", pathname);
     return NextResponse.redirect(loginUrl);
+  }
+
+  if (session.papel === "PRESENCA" && pathname !== "/admin/presenca") {
+    return NextResponse.redirect(new URL("/admin/presenca", request.url));
   }
 
   return NextResponse.next();

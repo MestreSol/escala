@@ -17,9 +17,11 @@ type FuncaoFormProps = {
     exigeGrupoCompleto: boolean;
   };
   submitLabel: string;
+  /** Pastoral com hierarquia (coroinhas). Sem ela (ex: ministros), o campo de grau some. */
+  usaGraus: boolean;
 };
 
-export function FuncaoForm({ action, defaultValues, submitLabel }: FuncaoFormProps) {
+export function FuncaoForm({ action, defaultValues, submitLabel, usaGraus }: FuncaoFormProps) {
   const [state, formAction, pending] = useActionState(action, {});
   useActionToast(state, pending, "Função salva.");
 
@@ -39,7 +41,7 @@ export function FuncaoForm({ action, defaultValues, submitLabel }: FuncaoFormPro
           ))}
         </Select>
       </div>
-      <div>
+      <div hidden={!usaGraus}>
         <Label htmlFor="grauMinimo">Grau mínimo</Label>
         <Select id="grauMinimo" name="grauMinimo" defaultValue={defaultValues?.grauMinimo ?? "COROINHA"}>
           {Object.entries(GRAU_LABEL).map(([value, label]) => (

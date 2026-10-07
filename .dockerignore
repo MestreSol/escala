@@ -1,0 +1,17 @@
+node_modules
+.next
+.git
+.idea
+.vscode
+.claude
+.vercel
+coverage
+npm-debug.log*
+*.tsbuildinfo
+next-env.d.ts
+pnpm-lock.yaml
+pnpm-workspace.yaml
+
+# Segredos nunca entram na imagem — chegam em runtime pelo env_file do compose.
+.env*
+!.env.example

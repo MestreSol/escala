@@ -9,31 +9,37 @@ const TABELA = "EscalaPublicada";
  * mais antigo. A escala mostrada é sempre a atual do banco — publicar só
  * decide se os servidores podem ver aquele mês.
  */
-export async function listarMesesPublicados(): Promise<string[]> {
+export async function listarMesesPublicados(pastoralId: string): Promise<string[]> {
   const { data, error } = await supabase
     .from(TABELA)
     .select("mes")
+    .eq("pastoralId", pastoralId)
     .order("mes", { ascending: false })
     .returns<{ mes: string }[]>();
   if (error) throw error;
   return (data ?? []).map((linha) => linha.mes);
 }
 
-export async function mesEstaPublicado(mes: string): Promise<boolean> {
-  const { data, error } = await supabase.from(TABELA).select("id").eq("mes", mes).limit(1);
+export async function mesEstaPublicado(pastoralId: string, mes: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .from(TABELA)
+    .select("id")
+    .eq("pastoralId", pastoralId)
+    .eq("mes", mes)
+    .limit(1);
   if (error) throw error;
   return (data ?? []).length > 0;
 }
 
-export async function publicarMes(mes: string): Promise<void> {
+export async function publicarMes(paroquiaId: string, pastoralId: string, mes: string): Promise<void> {
   const { error } = await supabase
     .from(TABELA)
-    .upsert({ id: generateId(), mes }, { onConflict: "mes", ignoreDuplicates: true });
+    .upsert({ id: generateId(), paroquiaId, pastoralId, mes }, { onConflict: "pastoralId,mes", ignoreDuplicates: true });
   if (error) throw error;
 }
 
-export async function despublicarMes(mes: string): Promise<void> {
-  const { error } = await supabase.from(TABELA).delete().eq("mes", mes);
+export async function despublicarMes(pastoralId: string, mes: string): Promise<void> {
+  const { error } = await supabase.from(TABELA).delete().eq("pastoralId", pastoralId).eq("mes", mes);
   if (error) throw error;
 }
 
@@ -49,8 +55,8 @@ export function somarMeses(mes: string, n: number): string {
  * seguinte ao último com escala fechada (publicada), mas nunca antes do mês
  * atual. Ex: fechou setembro → a tela de indisponibilidade já abre em outubro.
  */
-export async function primeiroMesAberto(): Promise<string> {
-  const publicados = await listarMesesPublicados(); // mais recente primeiro
+export async function primeiroMesAberto(pastoralId: string): Promise<string> {
+  const publicados = await listarMesesPublicados(pastoralId); // mais recente primeiro
   const mesAtual = agoraNaParoquia().slice(0, 7);
   const depoisDoUltimoFechado = publicados.length > 0 ? somarMeses(publicados[0], 1) : mesAtual;
   return depoisDoUltimoFechado > mesAtual ? depoisDoUltimoFechado : mesAtual;

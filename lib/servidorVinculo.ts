@@ -21,9 +21,17 @@ export async function getVinculosDoServidor(servidorId: string): Promise<string[
   return (data ?? []).map((v) => (v.servidorAId === servidorId ? v.servidorBId : v.servidorAId));
 }
 
-/** Mapa completo servidorId -> lista de ids vinculados, para o gerador de escala. */
-export async function getVinculosMap(): Promise<Map<string, string[]>> {
-  const { data, error } = await supabase.from(TABELA).select("servidorAId, servidorBId").returns<ServidorVinculoRow[]>();
+/**
+ * Mapa servidorId -> lista de ids vinculados, para o gerador de escala.
+ * Basta filtrar pelo servidor A: vínculo só é gravado entre servidores da
+ * mesma pastoral (ver saveServidorVinculos).
+ */
+export async function getVinculosMap(pastoralId: string): Promise<Map<string, string[]>> {
+  const { data, error } = await supabase
+    .from(TABELA)
+    .select("servidorAId, servidorBId, servidorA:Servidor!ServidorVinculo_servidorAId_fkey!inner(pastoralId)")
+    .eq("servidorA.pastoralId", pastoralId)
+    .returns<ServidorVinculoRow[]>();
   if (error) throw error;
 
   const mapa = new Map<string, string[]>();

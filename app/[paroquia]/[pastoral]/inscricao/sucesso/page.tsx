@@ -1,7 +1,12 @@
 import Link from "next/link";
 import { Marca } from "@/components/ui/Marca";
 
-export default function InscricaoSucessoPage() {
+export default async function InscricaoSucessoPage({
+  params,
+}: {
+  params: Promise<{ paroquia: string; pastoral: string }>;
+}) {
+  const { paroquia, pastoral } = await params;
   return (
     <div className="mx-auto flex min-h-screen max-w-md animate-fade-in flex-col items-center justify-center px-4 text-center">
       <div className="mb-6 flex size-14 items-center justify-center rounded-full bg-ok-soft text-2xl text-ok ring-1 ring-ok/20">
@@ -13,7 +18,7 @@ export default function InscricaoSucessoPage() {
         com o coordenador em quais missas foi escalado.
       </p>
       <Marca className="mb-6" />
-      <Link href="/inscricao" className="text-sm text-muted transition-colors hover:text-fg">
+      <Link href={`/${paroquia}/${pastoral}/inscricao`} className="text-sm text-muted transition-colors hover:text-fg">
         Enviar outra inscrição
       </Link>
     </div>

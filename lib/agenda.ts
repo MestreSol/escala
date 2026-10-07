@@ -6,8 +6,9 @@
 export const FUSO_ICS = "America/Sao_Paulo";
 const DURACAO_MINUTOS = 90;
 
-export function tituloDoEvento(missa: { funcoes: string[]; todosAtivos: boolean }): string {
-  if (missa.todosAtivos) return "Missa — todos os coroinhas";
+/** `rotuloTodos` é o da pastoral (ver rotuloTodos em lib/constants.ts). */
+export function tituloDoEvento(missa: { funcoes: string[]; todosAtivos: boolean }, rotuloTodos: string): string {
+  if (missa.todosAtivos) return `Missa — ${rotuloTodos.toLowerCase()}`;
   return missa.funcoes.length > 0 ? `Servir na missa — ${missa.funcoes.join(" + ")}` : "Servir na missa";
 }
 

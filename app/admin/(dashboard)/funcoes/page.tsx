@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
+import { pastoralDoPainel } from "@/lib/sessao";
 import { buttonClasses } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { DeleteButton } from "@/components/admin/DeleteButton";
-import { PRIORIDADE_LABEL, PRIORIDADE_ORDEM, GRAU_LABEL, GRAU_ORDEM } from "@/lib/constants";
+import { PRIORIDADE_LABEL, PRIORIDADE_ORDEM, GRAU_LABEL, GRAU_ORDEM, usaGraus } from "@/lib/constants";
 import { DataTable } from "@/components/ui/DataTable";
 import type { FuncaoRow } from "@/lib/types";
 import { deleteFuncao } from "./actions";
@@ -17,9 +18,12 @@ const PRIORIDADE_COLOR: Record<string, "red" | "yellow" | "gray"> = {
 export const dynamic = "force-dynamic";
 
 export default async function FuncoesPage() {
+  const { pastoral } = await pastoralDoPainel();
+  const comGraus = usaGraus(pastoral.tipo);
   const { data, error } = await supabase
     .from("Funcao")
     .select("*")
+    .eq("pastoralId", pastoral.id)
     .eq("ativo", true)
     .order("nome", { ascending: true })
     .returns<FuncaoRow[]>();
@@ -29,7 +33,10 @@ export default async function FuncoesPage() {
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-semibold tracking-tight text-fg">Funções</h1>
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight text-fg">Funções</h1>
+          <p className="text-sm text-muted">{pastoral.nome}</p>
+        </div>
         <Link href="/admin/funcoes/nova" className={buttonClasses()}>
           Nova função
         </Link>
@@ -41,7 +48,7 @@ export default async function FuncoesPage() {
         colunas={[
           { chave: "nome", titulo: "Nome", ordenavel: true },
           { chave: "prioridade", titulo: "Prioridade", ordenavel: true },
-          { chave: "grau", titulo: "Grau mínimo", ordenavel: true },
+          ...(comGraus ? [{ chave: "grau", titulo: "Grau mínimo", ordenavel: true }] : []),
           { chave: "vagas", titulo: "Vagas padrão", ordenavel: true },
           { chave: "acoes", titulo: "", alinhar: "right" },
         ]}

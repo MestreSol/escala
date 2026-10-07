@@ -1,7 +1,8 @@
 import { supabase } from "@/lib/supabase";
+import { pastoralDoPainel } from "@/lib/sessao";
 import { Badge } from "@/components/ui/Badge";
 import { ReactNode } from "react";
-import { GRAU_LABEL, GRAU_ORDEM } from "@/lib/constants";
+import { GRAU_LABEL, GRAU_ORDEM, usaGraus } from "@/lib/constants";
 import { DataTable } from "@/components/ui/DataTable";
 import { getFrequenciaPorServidor, LIMIAR_FREQUENCIA, MINIMO_REGISTROS_FREQUENCIA } from "@/lib/frequencia";
 import type { EscalaAtribuicaoRow, FuncaoRow, ServidorRow } from "@/lib/types";
@@ -17,16 +18,20 @@ const COLUNA_FIXA = "sticky left-0 z-10 bg-surface shadow-[1px_0_0_var(--color-l
 export const dynamic = "force-dynamic";
 
 export default async function AcompanhamentoPage() {
+  const { pastoral } = await pastoralDoPainel();
+  const comGraus = usaGraus(pastoral.tipo);
   const [servidoresResult, funcoesResult, atribuicoesResult, frequencias] = await Promise.all([
     supabase
       .from("Servidor")
       .select("id, nome, categoria")
+      .eq("pastoralId", pastoral.id)
       .eq("ativo", true)
       .order("nome", { ascending: true })
       .returns<Pick<ServidorRow, "id" | "nome" | "categoria">[]>(),
     supabase
       .from("Funcao")
       .select("id, nome, prioridade")
+      .eq("pastoralId", pastoral.id)
       .eq("ativo", true)
       .order("prioridade", { ascending: true })
       .order("nome", { ascending: true })
@@ -34,9 +39,10 @@ export default async function AcompanhamentoPage() {
     supabase
       .from("EscalaAtribuicao")
       .select("servidorId, funcaoId, ocorrenciaId")
+      .eq("pastoralId", pastoral.id)
       .not("servidorId", "is", null)
       .returns<Pick<EscalaAtribuicaoRow, "servidorId" | "funcaoId" | "ocorrenciaId">[]>(),
-    getFrequenciaPorServidor(),
+    getFrequenciaPorServidor(pastoral.id),
   ]);
   if (servidoresResult.error) throw servidoresResult.error;
   if (funcoesResult.error) throw funcoesResult.error;
@@ -83,7 +89,7 @@ export default async function AcompanhamentoPage() {
         ordemPadrao={{ chave: "nome", direcao: "asc" }}
         colunas={[
           { chave: "nome", titulo: "Nome", ordenavel: true, className: COLUNA_FIXA },
-          { chave: "categoria", titulo: "Categoria", ordenavel: true },
+          ...(comGraus ? [{ chave: "categoria", titulo: "Categoria", ordenavel: true }] : []),
           { chave: "total", titulo: "Total missas", ordenavel: true, alinhar: "right" },
           { chave: "presenca", titulo: "Presença", ordenavel: true, alinhar: "right" },
           ...funcoes.map((funcao) => ({

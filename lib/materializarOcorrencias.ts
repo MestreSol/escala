@@ -16,10 +16,11 @@ import type { MissaRow } from "@/lib/types";
  * vira Server Action alcançável por POST direto — isto aqui é só um helper
  * interno das páginas e actions.
  */
-export async function materializarOcorrencias(periodoInicio: Date, periodoFim: Date) {
+export async function materializarOcorrencias(paroquiaId: string, periodoInicio: Date, periodoFim: Date) {
   const { data: missas, error: missasError } = await supabase
     .from("Missa")
     .select("*")
+    .eq("paroquiaId", paroquiaId)
     .eq("ativo", true)
     .returns<MissaRow[]>();
   if (missasError) throw missasError;
@@ -37,6 +38,7 @@ export async function materializarOcorrencias(periodoInicio: Date, periodoFim: D
 
     return datas.map((data) => ({
       id: generateId(),
+      paroquiaId,
       missaId: missa.id,
       data: combinarDataHorario(data, missa.horario).toISOString(),
     }));

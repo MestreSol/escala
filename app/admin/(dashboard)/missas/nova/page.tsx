@@ -1,4 +1,6 @@
 import { MissaForm } from "@/components/admin/MissaForm";
+import { pastoralDoPainel } from "@/lib/sessao";
+import { rotuloTodos } from "@/lib/constants";
 import { createMissa } from "../actions";
 
 export default async function NovaMissaPage({
@@ -8,6 +10,7 @@ export default async function NovaMissaPage({
 }) {
   const { tipo } = await searchParams;
   const grande = tipo === "DATA_UNICA";
+  const { pastoral } = await pastoralDoPainel();
 
   return (
     <div>
@@ -19,6 +22,7 @@ export default async function NovaMissaPage({
         action={createMissa}
         submitLabel={grande ? "Criar missa grande" : "Criar missa"}
         tipoInicial={grande ? "DATA_UNICA" : "RECORRENTE"}
+        pastoral={{ nome: pastoral.nome, rotuloTodos: rotuloTodos(pastoral.tipo) }}
       />
     </div>
   );

@@ -1,6 +1,8 @@
 "use server";
 
-import { exigirUsuario } from "@/lib/sessao";
+import { exigirPastoral } from "@/lib/sessao";
+import { garantirDaParoquia, garantirDaPastoral } from "@/lib/paroquia";
+import { GRAU_UNICO, usaGraus } from "@/lib/constants";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { supabase } from "@/lib/supabase";
@@ -15,12 +17,14 @@ export async function updateServidor(
   _prevState: ServidorFormState,
   formData: FormData
 ): Promise<ServidorFormState> {
-  await exigirUsuario();
+  const { paroquiaId, pastoral } = await exigirPastoral();
+  await garantirDaPastoral("Servidor", id, pastoral.id);
   const parsed = servidorSchema.safeParse({
     nome: formData.get("nome"),
     dataNascimento: formData.get("dataNascimento"),
     comunidade: formData.get("comunidade"),
-    categoria: formData.get("categoria"),
+    // Pastoral sem graus (ex: ministros): todo mundo no mesmo nível.
+    categoria: usaGraus(pastoral.tipo) ? formData.get("categoria") : GRAU_UNICO,
     missaIds: formData.getAll("missaIds"),
   });
 
@@ -29,10 +33,11 @@ export async function updateServidor(
   }
 
   const { missaIds, ...servidorData } = parsed.data;
+  await garantirDaParoquia("Missa", missaIds, paroquiaId);
 
   const { error: updateError } = await supabase
     .from("Servidor")
-    .update({ ...servidorData, updatedAt: nowIso() })
+    .update({ ...servidorData, experiente: formData.get("experiente") === "on", updatedAt: nowIso() })
     .eq("id", id);
   if (updateError) return erroDoBanco(updateError, "servidor");
 
@@ -54,10 +59,12 @@ export async function updateServidor(
 }
 
 export async function saveServidorVinculos(servidorId: string, formData: FormData) {
-  await exigirUsuario();
+  const { pastoralId } = await exigirPastoral();
+  await garantirDaPastoral("Servidor", servidorId, pastoralId);
   const { data: outrosServidores, error } = await supabase
     .from("Servidor")
     .select("id")
+    .eq("pastoralId", pastoralId)
     .eq("ativo", true)
     .neq("id", servidorId)
     .returns<{ id: string }[]>();
@@ -73,7 +80,8 @@ export async function saveServidorVinculos(servidorId: string, formData: FormDat
 }
 
 export async function atualizarFotoServidor(servidorId: string, formData: FormData) {
-  await exigirUsuario();
+  const { pastoralId } = await exigirPastoral();
+  await garantirDaPastoral("Servidor", servidorId, pastoralId);
   const arquivo = formData.get("foto");
   if (!(arquivo instanceof File) || arquivo.size === 0) {
     throw new Error("Selecione uma imagem.");
@@ -89,10 +97,30 @@ export async function atualizarFotoServidor(servidorId: string, formData: FormDa
 }
 
 export async function deleteServidor(id: string) {
-  await exigirUsuario();
-  const { error } = await supabase.from("Servidor").delete().eq("id", id);
+  const { pastoralId } = await exigirPastoral();
+  const { error } = await supabase.from("Servidor").delete().eq("id", id).eq("pastoralId", pastoralId);
   if (error) throw error;
 
   revalidatePath("/admin/servidores");
   redirect("/admin/servidores");
+}
+
+export async function alternarExperiente(servidorId: string) {
+  const { pastoral } = await exigirPastoral();
+  await garantirDaPastoral("Servidor", servidorId, pastoral.id);
+  const { data: servidor, error } = await supabase
+    .from("Servidor")
+    .select("experiente")
+    .eq("id", servidorId)
+    .single<{ experiente: boolean }>();
+  if (error) throw error;
+
+  const { error: updateError } = await supabase
+    .from("Servidor")
+    .update({ experiente: !servidor.experiente, updatedAt: nowIso() })
+    .eq("id", servidorId);
+  if (updateError) throw updateError;
+
+  revalidatePath("/admin/servidores");
+  revalidatePath(`/admin/servidores/${servidorId}`);
 }
