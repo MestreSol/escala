@@ -37,8 +37,10 @@ const cabecalhosDeSeguranca = [
 ];
 
 const nextConfig: NextConfig = {
-  // Gera .next/standalone (server.js + só as dependências usadas) pra imagem Docker.
-  output: "standalone",
+  // Gera .next/standalone (server.js + só as dependências usadas) só no build
+  // da imagem Docker (ver Dockerfile). Na Vercel o standalone quebra o build
+  // ("ENOENT .next/next-server.js.nft.json"), então fica desligado lá.
+  output: process.env.BUILD_STANDALONE === "1" ? "standalone" : undefined,
   poweredByHeader: false,
   async headers() {
     return [

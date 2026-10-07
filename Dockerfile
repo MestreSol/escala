@@ -29,6 +29,8 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 # As variáveis do Supabase/sessão não são necessárias no build (lib/supabase.ts
 # usa placeholder e as páginas são dinâmicas) — chegam só em runtime.
+# BUILD_STANDALONE liga o `output: "standalone"` do next.config.ts.
+ENV BUILD_STANDALONE=1
 RUN npm run build
 
 # ---------------------------------------------------------------------------
