@@ -1,7 +1,7 @@
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { supabase } from "@/lib/supabase";
-import { pastoralDaPresenca } from "@/lib/sessao";
+import { obterUsuarioAtual, pastoralDaPresenca } from "@/lib/sessao";
 import { PresencaSelect } from "@/components/admin/PresencaSelect";
 import { intervaloDeHojeNaParoquia, lerDataArmazenada, paraExibicao } from "@/lib/occurrences";
 import type { EscalaAtribuicaoRow, FuncaoRow, MissaOcorrenciaRow, MissaRow, ServidorRow } from "@/lib/types";
@@ -19,6 +19,8 @@ type OcorrenciaDoDia = MissaOcorrenciaRow & {
 
 export default async function PresencaDoDiaPage() {
   const { paroquia, pastoral } = await pastoralDaPresenca();
+  const usuario = await obterUsuarioAtual();
+  const podeCorrigir = usuario?.papel === "ADMIN" || usuario?.papel === "SUPERADMIN";
   const { inicio, fim } = intervaloDeHojeNaParoquia();
 
   const { data, error } = await supabase
@@ -78,7 +80,7 @@ export default async function PresencaDoDiaPage() {
                         </p>
                         {atribuicao.funcao ? <p className="text-xs text-muted">{atribuicao.funcao.nome}</p> : null}
                       </div>
-                      <PresencaSelect action={salvarPresenca} defaultValue={atribuicao.presente} />
+                      <PresencaSelect action={salvarPresenca} defaultValue={atribuicao.presente} podeCorrigir={podeCorrigir} />
                     </li>
                   );
                 })}

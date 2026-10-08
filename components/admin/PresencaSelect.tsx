@@ -13,12 +13,15 @@ const paraValor = (presente: boolean | null): Valor => (presente === null ? "" :
 export function PresencaSelect({
   action,
   defaultValue,
-  travarConfirmada = true,
+  podeCorrigir = false,
 }: {
   action: (formData: FormData) => Promise<ResultadoAcao>;
   defaultValue: boolean | null;
-  /** Presença já confirmada ("Presente") fica travada. Só o administrador da paróquia corrige (ver registrarPresenca). */
-  travarConfirmada?: boolean;
+  /**
+   * Presença já confirmada ("Presente") fica travada. Quem pode corrigir
+   * (ADMIN/SUPERADMIN, ver garantirPresencaNaoTravada) ganha o botão "Corrigir".
+   */
+  podeCorrigir?: boolean;
 }) {
   // Sem <form> de propósito: o React 19 chama form.reset() quando a action de
   // um <form> termina, e o select voltava pra "Não registrada" mesmo com a
@@ -26,15 +29,27 @@ export function PresencaSelect({
   const [valor, setValor] = useState<Valor>(paraValor(defaultValue));
   const [salvo, setSalvo] = useState<Valor>(paraValor(defaultValue));
   const [salvando, startTransition] = useTransition();
+  const [corrigindo, setCorrigindo] = useState(false);
 
-  if (travarConfirmada && salvo === "true") {
+  if (salvo === "true" && !corrigindo) {
     return (
-      <span
-        title="Presença confirmada — não pode mais ser alterada."
-        className="inline-flex w-36 items-center gap-1.5 rounded-md bg-ok-soft px-3 py-2 text-sm font-medium text-ok ring-1 ring-inset ring-ok/20"
-      >
-        ✓ Presente
-      </span>
+      <div className="flex items-center gap-2">
+        <span
+          title={podeCorrigir ? "Presença confirmada." : "Presença confirmada — não pode mais ser alterada."}
+          className="inline-flex w-36 items-center gap-1.5 rounded-md bg-ok-soft px-3 py-2 text-sm font-medium text-ok ring-1 ring-inset ring-ok/20"
+        >
+          ✓ Presente
+        </span>
+        {podeCorrigir ? (
+          <button
+            type="button"
+            onClick={() => setCorrigindo(true)}
+            className="text-xs font-medium text-muted transition-colors hover:text-accent"
+          >
+            Corrigir
+          </button>
+        ) : null}
+      </div>
     );
   }
 
@@ -49,7 +64,10 @@ export function PresencaSelect({
           // Deu certo: guarda o valor salvo (é ele que trava o "Presente");
           // aviso (ex: presença já travada) volta o select pro valor salvo.
           if (resultado && "aviso" in resultado) setValor(salvo);
-          else setSalvo(novo);
+          else {
+            setSalvo(novo);
+            setCorrigindo(false);
+          }
           return resultado;
         },
         "Presença registrada.",

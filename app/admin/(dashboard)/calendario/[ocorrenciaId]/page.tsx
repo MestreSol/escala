@@ -188,7 +188,7 @@ function ListaPorFuncao({
                 </td>
                 <td className="px-4 py-3 text-sm">
                   {linha.servidorId ? (
-                    <PresencaSelect action={salvarPresenca} defaultValue={linha.presente} travarConfirmada={travarPresenca} />
+                    <PresencaSelect action={salvarPresenca} defaultValue={linha.presente} podeCorrigir={!travarPresenca} />
                   ) : (
                     <span className="text-subtle">—</span>
                   )}
@@ -271,7 +271,7 @@ function ListaTodosAtivos({
                   <tr key={atribuicao.id} className="transition-colors hover:bg-surface-2/60">
                     <td className="px-4 py-3 text-sm font-medium text-fg">{nome}</td>
                     <td className="px-4 py-3 text-sm">
-                      <PresencaSelect action={salvarPresenca} defaultValue={atribuicao.presente} travarConfirmada={travarPresenca} />
+                      <PresencaSelect action={salvarPresenca} defaultValue={atribuicao.presente} podeCorrigir={!travarPresenca} />
                     </td>
                     <td className="px-4 py-3 text-right text-sm">
                       <DeleteButton action={remover} confirmMessage={`Remover ${nome} desta lista?`} label="Remover" successMessage="Removido da lista." />
