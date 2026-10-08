@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { supabase } from "@/lib/supabase";
-import { pastoralDoPainel } from "@/lib/sessao";
+import { obterUsuarioAtual, pastoralDoPainel } from "@/lib/sessao";
 import { getConfigMissa } from "@/lib/missaPastoral";
 import { Badge } from "@/components/ui/Badge";
 import { SubmitButton } from "@/components/ui/SubmitButton";
@@ -43,6 +43,8 @@ export default async function OcorrenciaDetailPage({
 }) {
   const { ocorrenciaId } = await params;
   const { paroquia, pastoral } = await pastoralDoPainel();
+  const usuario = await obterUsuarioAtual();
+  const travarPresenca = usuario?.papel !== "ADMIN" && usuario?.papel !== "SUPERADMIN";
 
   const [ocorrenciaResult, servidoresResult] = await Promise.all([
     supabase
@@ -97,9 +99,9 @@ export default async function OcorrenciaDetailPage({
       </p>
 
       {config.escalarTodosAtivos ? (
-        <ListaTodosAtivos ocorrencia={ocorrencia} servidores={servidores} />
+        <ListaTodosAtivos ocorrencia={ocorrencia} servidores={servidores} travarPresenca={travarPresenca} />
       ) : (
-        <ListaPorFuncao ocorrencia={ocorrencia} servidores={servidores} />
+        <ListaPorFuncao ocorrencia={ocorrencia} servidores={servidores} travarPresenca={travarPresenca} />
       )}
     </div>
   );
@@ -108,9 +110,11 @@ export default async function OcorrenciaDetailPage({
 function ListaPorFuncao({
   ocorrencia,
   servidores,
+  travarPresenca,
 }: {
   ocorrencia: OcorrenciaComDetalhes;
   servidores: ServidorRow[];
+  travarPresenca: boolean;
 }) {
   const atribuicaoPorSlot = new Map(ocorrencia.atribuicoes.map((a) => [`${a.funcaoId}:${a.slotIndex}`, a]));
 
@@ -184,7 +188,7 @@ function ListaPorFuncao({
                 </td>
                 <td className="px-4 py-3 text-sm">
                   {linha.servidorId ? (
-                    <PresencaSelect action={salvarPresenca} defaultValue={linha.presente} />
+                    <PresencaSelect action={salvarPresenca} defaultValue={linha.presente} travarConfirmada={travarPresenca} />
                   ) : (
                     <span className="text-subtle">—</span>
                   )}
@@ -201,9 +205,11 @@ function ListaPorFuncao({
 function ListaTodosAtivos({
   ocorrencia,
   servidores,
+  travarPresenca,
 }: {
   ocorrencia: OcorrenciaComDetalhes;
   servidores: ServidorRow[];
+  travarPresenca: boolean;
 }) {
   const escalados = ocorrencia.atribuicoes
     .filter((a) => a.funcaoId === null)
@@ -265,7 +271,7 @@ function ListaTodosAtivos({
                   <tr key={atribuicao.id} className="transition-colors hover:bg-surface-2/60">
                     <td className="px-4 py-3 text-sm font-medium text-fg">{nome}</td>
                     <td className="px-4 py-3 text-sm">
-                      <PresencaSelect action={salvarPresenca} defaultValue={atribuicao.presente} />
+                      <PresencaSelect action={salvarPresenca} defaultValue={atribuicao.presente} travarConfirmada={travarPresenca} />
                     </td>
                     <td className="px-4 py-3 text-right text-sm">
                       <DeleteButton action={remover} confirmMessage={`Remover ${nome} desta lista?`} label="Remover" successMessage="Removido da lista." />

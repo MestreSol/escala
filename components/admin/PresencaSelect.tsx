@@ -1,47 +1,78 @@
 "use client";
 
-import { useFormStatus } from "react-dom";
+import { useState, useTransition } from "react";
 import { Select } from "@/components/ui/Field";
 import { Spinner } from "@/components/ui/Spinner";
 import { executarComToast } from "@/components/ui/ActionForm";
 import type { ResultadoAcao } from "@/lib/avisos";
 
+type Valor = "" | "true" | "false";
+
+const paraValor = (presente: boolean | null): Valor => (presente === null ? "" : presente ? "true" : "false");
+
 export function PresencaSelect({
   action,
   defaultValue,
+  travarConfirmada = true,
 }: {
   action: (formData: FormData) => Promise<ResultadoAcao>;
   defaultValue: boolean | null;
+  /** Presença já confirmada ("Presente") fica travada. Só o administrador da paróquia corrige (ver registrarPresenca). */
+  travarConfirmada?: boolean;
 }) {
-  return (
-    <form
-      action={(formData) =>
-        executarComToast(() => action(formData), "Presença registrada.", "Não foi possível registrar a presença.")
-      }
-      className="flex items-center gap-2"
-    >
-      <SelectPresenca defaultValue={defaultValue} />
-    </form>
-  );
-}
+  // Sem <form> de propósito: o React 19 chama form.reset() quando a action de
+  // um <form> termina, e o select voltava pra "Não registrada" mesmo com a
+  // presença salva no banco. Aqui a action é chamada direto do onChange.
+  const [valor, setValor] = useState<Valor>(paraValor(defaultValue));
+  const [salvo, setSalvo] = useState<Valor>(paraValor(defaultValue));
+  const [salvando, startTransition] = useTransition();
 
-function SelectPresenca({ defaultValue }: { defaultValue: boolean | null }) {
-  const { pending } = useFormStatus();
+  if (travarConfirmada && salvo === "true") {
+    return (
+      <span
+        title="Presença confirmada — não pode mais ser alterada."
+        className="inline-flex w-36 items-center gap-1.5 rounded-md bg-ok-soft px-3 py-2 text-sm font-medium text-ok ring-1 ring-inset ring-ok/20"
+      >
+        ✓ Presente
+      </span>
+    );
+  }
+
+  function salvar(novo: Valor) {
+    setValor(novo);
+    const formData = new FormData();
+    formData.set("presente", novo);
+    startTransition(async () => {
+      await executarComToast(
+        async () => {
+          const resultado = await action(formData);
+          // Deu certo: guarda o valor salvo (é ele que trava o "Presente");
+          // aviso (ex: presença já travada) volta o select pro valor salvo.
+          if (resultado && "aviso" in resultado) setValor(salvo);
+          else setSalvo(novo);
+          return resultado;
+        },
+        "Presença registrada.",
+        "Não foi possível registrar a presença."
+      );
+    });
+  }
+
   return (
-    <>
+    <div className="flex items-center gap-2">
       <Select
         name="presente"
-        defaultValue={defaultValue === null ? "" : String(defaultValue)}
+        value={valor}
         className="w-36"
-        disabled={pending}
-        onChange={(event) => event.currentTarget.form?.requestSubmit()}
+        disabled={salvando}
+        onChange={(event) => salvar(event.currentTarget.value as Valor)}
       >
         <option value="">Não registrada</option>
         <option value="true">Presente</option>
         <option value="false">Faltou</option>
       </Select>
       {/* Sempre renderizado (só troca a opacidade) pra não empurrar o layout. */}
-      <Spinner className={`size-3.5 text-accent transition-opacity ${pending ? "opacity-100" : "opacity-0"}`} />
-    </>
+      <Spinner className={`size-3.5 text-accent transition-opacity ${salvando ? "opacity-100" : "opacity-0"}`} />
+    </div>
   );
 }

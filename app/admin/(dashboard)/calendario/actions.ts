@@ -351,6 +351,17 @@ async function garantirOcorrenciaParaPresenca(usuario: UsuarioAtual, ocorrenciaI
   if (!data) throw new AvisoAoUsuario("Você só pode registrar presença nas missas de hoje.");
 }
 
+/**
+ * Presença confirmada ("Presente") fica travada: só o administrador da
+ * paróquia (ADMIN/SUPERADMIN) pode mudar depois, pra corrigir engano.
+ */
+function garantirPresencaNaoTravada(papel: string, atuais: { presente: boolean | null }[], nova: boolean | null) {
+  const podeCorrigir = papel === "ADMIN" || papel === "SUPERADMIN";
+  if (!podeCorrigir && nova !== true && atuais.some((a) => a.presente === true)) {
+    throw new AvisoAoUsuario("A presença já foi confirmada e não pode ser alterada. Só o administrador da paróquia pode corrigir.");
+  }
+}
+
 async function registrarPresencaInterno(
   ocorrenciaId: string,
   funcaoId: string,
@@ -361,6 +372,17 @@ async function registrarPresencaInterno(
   await garantirOcorrenciaParaPresenca(usuario, ocorrenciaId, paroquiaId);
   const valor = String(formData.get("presente") ?? "");
   const presente = valor === "" ? null : valor === "true";
+
+  const { data: atuais, error: atuaisError } = await supabase
+    .from("EscalaAtribuicao")
+    .select("presente")
+    .eq("pastoralId", pastoralId)
+    .eq("ocorrenciaId", ocorrenciaId)
+    .eq("funcaoId", funcaoId)
+    .eq("slotIndex", slotIndex)
+    .returns<{ presente: boolean | null }[]>();
+  if (atuaisError) throw atuaisError;
+  garantirPresencaNaoTravada(usuario.papel, atuais ?? [], presente);
 
   const { error } = await supabase
     .from("EscalaAtribuicao")
@@ -500,6 +522,16 @@ async function registrarPresencaTodosAtivosInterno(ocorrenciaId: string, atribui
   await garantirOcorrenciaParaPresenca(usuario, ocorrenciaId, paroquiaId);
   const valor = String(formData.get("presente") ?? "");
   const presente = valor === "" ? null : valor === "true";
+
+  const { data: atuais, error: atuaisError } = await supabase
+    .from("EscalaAtribuicao")
+    .select("presente")
+    .eq("id", atribuicaoId)
+    .eq("pastoralId", pastoralId)
+    .eq("ocorrenciaId", ocorrenciaId)
+    .returns<{ presente: boolean | null }[]>();
+  if (atuaisError) throw atuaisError;
+  garantirPresencaNaoTravada(usuario.papel, atuais ?? [], presente);
 
   const { error } = await supabase
     .from("EscalaAtribuicao")
