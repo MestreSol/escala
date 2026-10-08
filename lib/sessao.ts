@@ -11,7 +11,7 @@ import {
   verificarSessionToken,
   type SessaoPayload,
 } from "@/lib/auth";
-import type { TipoPastoral } from "@/lib/types";
+import type { ModoEscala, TipoPastoral } from "@/lib/types";
 
 export type UsuarioAtual = SessaoPayload & {
   /** Nulo só para SUPERADMIN — a paróquia dele vem do cookie (ver obterParoquiaAtual). */
@@ -22,7 +22,14 @@ export type UsuarioAtual = SessaoPayload & {
 
 export type ParoquiaAtual = { id: string; nome: string; slug: string };
 
-export type PastoralAtual = { id: string; paroquiaId: string; nome: string; slug: string; tipo: TipoPastoral };
+export type PastoralAtual = {
+  id: string;
+  paroquiaId: string;
+  nome: string;
+  slug: string;
+  tipo: TipoPastoral;
+  modoEscala: ModoEscala;
+};
 
 /**
  * Lê e valida a sessão do usuário logado a partir do cookie. Só usável em
@@ -84,7 +91,7 @@ export const obterParoquiaAtual = cache(async (): Promise<ParoquiaAtual | null> 
 export const listarPastoraisDaParoquia = cache(async (paroquiaId: string): Promise<PastoralAtual[]> => {
   const { data, error } = await supabase
     .from("Pastoral")
-    .select("id, paroquiaId, nome, slug, tipo")
+    .select("id, paroquiaId, nome, slug, tipo, modoEscala")
     .eq("paroquiaId", paroquiaId)
     .order("nome", { ascending: true })
     .returns<PastoralAtual[]>();

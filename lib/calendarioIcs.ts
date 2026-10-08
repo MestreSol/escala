@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabase";
-import { lerDataArmazenada, periodoDoMes } from "@/lib/occurrences";
+import { lerDataArmazenada } from "@/lib/occurrences";
+import { periodoDaChave } from "@/lib/periodoEscala";
 import { listarMesesPublicados } from "@/lib/escalaPublicada";
 import { FUSO_ICS, dataHoraIcs, fimDoEvento, tituloDoEvento } from "@/lib/agenda";
 import { getConfigMissasMap } from "@/lib/missaPastoral";
@@ -44,10 +45,11 @@ export async function buscarMissasDoServidor(pastoralId: string, servidorId: str
   if (publicados.length === 0) return [];
   const missasTodosAtivos = [...configs].filter(([, config]) => config.escalarTodosAtivos).map(([missaId]) => missaId);
 
-  const inicio = periodoDoMes(publicados[publicados.length - 1]).periodoInicio;
-  const fim = periodoDoMes(publicados[0]).periodoFim;
-  const noMesPublicado = (data: Date) =>
-    publicados.includes(`${data.getUTCFullYear()}-${String(data.getUTCMonth() + 1).padStart(2, "0")}`);
+  // Períodos publicados: meses ("2026-10") ou semanas ("2026-10-12"), conforme o modo da pastoral.
+  const periodos = publicados.map(periodoDaChave);
+  const inicio = new Date(Math.min(...periodos.map((p) => p.periodoInicio.getTime())));
+  const fim = new Date(Math.max(...periodos.map((p) => p.periodoFim.getTime())));
+  const noMesPublicado = (data: Date) => periodos.some((p) => data >= p.periodoInicio && data <= p.periodoFim);
 
   const [atribuicoesResult, todosAtivosResult] = await Promise.all([
     supabase

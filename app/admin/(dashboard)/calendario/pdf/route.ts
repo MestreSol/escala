@@ -1,14 +1,11 @@
-import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
 import { PDFDocument } from "pdf-lib";
-import { periodoDoMes, paraExibicao } from "@/lib/occurrences";
+import { periodoDaUrl } from "@/lib/periodoEscala";
 import { buscarEscalaDoPeriodo, type OcorrenciaEscala } from "@/lib/escalaDoPeriodo";
 import { obterParoquiaAtual, obterPastoralAtual } from "@/lib/sessao";
 import {
   ALTURA_CABECALHO,
   LARGURA_ESCALA,
   alturaDaOcorrencia,
-  capitalizar,
   desenharEscala,
   type VarianteEscala,
 } from "@/lib/imagemEscala";
@@ -37,12 +34,15 @@ export async function GET(request: Request) {
   if (!paroquia || !pastoral) return new Response("Não autorizado.", { status: 401 });
 
   const { searchParams } = new URL(request.url);
-  const mes = searchParams.get("mes") ?? undefined;
   const variante: VarianteEscala = searchParams.get("variante") === "nomes" ? "nomes" : "completa";
 
-  const { periodoInicio, periodoFim } = periodoDoMes(mes);
+  const {
+    chave,
+    periodoInicio,
+    periodoFim,
+    titulo: tituloMes,
+  } = periodoDaUrl({ mes: searchParams.get("mes"), semana: searchParams.get("semana") });
   const ocorrencias = await buscarEscalaDoPeriodo(paroquia.id, pastoral.id, periodoInicio, periodoFim);
-  const tituloMes = capitalizar(format(paraExibicao(periodoInicio), "MMMM 'de' yyyy", { locale: ptBR }));
 
   const paginas = paginar(ocorrencias, variante);
   const pdf = await PDFDocument.create();
@@ -80,7 +80,7 @@ export async function GET(request: Request) {
   }
 
   const bytes = await pdf.save();
-  const mesArquivo = format(paraExibicao(periodoInicio), "yyyy-MM");
+  const mesArquivo = chave;
   return new Response(Buffer.from(bytes), {
     headers: {
       "Content-Type": "application/pdf",

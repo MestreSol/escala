@@ -55,13 +55,13 @@ export async function listarParoquiasAtivas(): Promise<Pick<ParoquiaRow, "id" | 
   return data ?? [];
 }
 
-export type PastoralPublicaInfo = Pick<PastoralRow, "id" | "nome" | "slug" | "tipo">;
+export type PastoralPublicaInfo = Pick<PastoralRow, "id" | "nome" | "slug" | "tipo" | "modoEscala">;
 
 /** Pastorais ATIVAS da paróquia, pra escolha na página pública dela. */
 export const listarPastoraisAtivas = cache(async (paroquiaId: string): Promise<PastoralPublicaInfo[]> => {
   const { data, error } = await supabase
     .from("Pastoral")
-    .select("id, nome, slug, tipo")
+    .select("id, nome, slug, tipo, modoEscala")
     .eq("paroquiaId", paroquiaId)
     .eq("ativo", true)
     .order("nome", { ascending: true })

@@ -1,29 +1,26 @@
 import Link from "next/link";
-import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
-import { periodoDoMes, paraExibicao } from "@/lib/occurrences";
-
-function capitalizar(texto: string) {
-  return texto.charAt(0).toUpperCase() + texto.slice(1);
-}
+import { periodoDaUrl } from "@/lib/periodoEscala";
 
 export default async function ConfirmarEscalaPage({
   searchParams,
 }: {
-  searchParams: Promise<{ mes?: string }>;
+  searchParams: Promise<{ mes?: string; semana?: string }>;
 }) {
-  const { mes } = await searchParams;
-  const { periodoInicio } = periodoDoMes(mes);
-  const mesReferencia = paraExibicao(periodoInicio);
-  const mesParam = format(mesReferencia, "yyyy-MM");
-  const mesLabel = capitalizar(format(mesReferencia, "MMMM 'de' yyyy", { locale: ptBR }));
+  const { mes, semana } = await searchParams;
+  const periodo = periodoDaUrl({ mes, semana });
+  const mesParam = periodo.chave;
+  const mesLabel = periodo.titulo;
+  const parametro = periodo.semanal ? `semana=${periodo.chave}` : `mes=${periodo.chave}`;
+  const mesDoCalendario = periodo.semanal
+    ? `${periodo.periodoFim.getUTCFullYear()}-${String(periodo.periodoFim.getUTCMonth() + 1).padStart(2, "0")}`
+    : periodo.chave;
 
-  const urlCompleta = `/admin/calendario/imagem?mes=${mesParam}&variante=completa`;
-  const urlNomes = `/admin/calendario/imagem?mes=${mesParam}&variante=nomes`;
+  const urlCompleta = `/admin/calendario/imagem?${parametro}&variante=completa`;
+  const urlNomes = `/admin/calendario/imagem?${parametro}&variante=nomes`;
 
   return (
     <div>
-      <Link href={`/admin/calendario?mes=${mesParam}`} className="mb-4 inline-block text-sm text-accent hover:text-accent-hover">
+      <Link href={`/admin/calendario?mes=${mesDoCalendario}`} className="mb-4 inline-block text-sm text-accent hover:text-accent-hover">
         ← Voltar ao calendário
       </Link>
       <h1 className="mb-1 text-2xl font-semibold tracking-tight text-fg">Escala confirmada — {mesLabel}</h1>
@@ -46,7 +43,7 @@ export default async function ConfirmarEscalaPage({
                 Baixar imagem
               </a>
               <a
-                href={`/admin/calendario/pdf?mes=${mesParam}&variante=completa`}
+                href={`/admin/calendario/pdf?${parametro}&variante=completa`}
                 className="text-sm font-medium text-accent hover:text-accent-hover"
                 title="Fundo branco, em folhas A4 — pra imprimir"
               >
@@ -72,7 +69,7 @@ export default async function ConfirmarEscalaPage({
                 Baixar imagem
               </a>
               <a
-                href={`/admin/calendario/pdf?mes=${mesParam}&variante=nomes`}
+                href={`/admin/calendario/pdf?${parametro}&variante=nomes`}
                 className="text-sm font-medium text-accent hover:text-accent-hover"
                 title="Fundo branco, em folhas A4 — pra imprimir"
               >

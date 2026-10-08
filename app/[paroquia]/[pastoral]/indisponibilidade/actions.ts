@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { setIndisponibilidadeDoServidorNoPeriodo } from "@/lib/servidorIndisponibilidade";
-import { primeiroMesAberto } from "@/lib/escalaPublicada";
+import { primeiroDiaAberto } from "@/lib/escalaPublicada";
 import { periodoDoMes } from "@/lib/occurrences";
 import { supabase } from "@/lib/supabase";
 import { pastoralPublica } from "@/lib/paroquia";
@@ -34,7 +34,8 @@ export async function salvarIndisponibilidade(
 
   // Mês com escala já fechada (ou que já passou) não aceita mais mudança —
   // a tela nem mostra, mas os argumentos vêm do navegador, então confere aqui.
-  const mesMinimo = await primeiroMesAberto(pastoral.id);
+  const diaAberto = await primeiroDiaAberto(pastoral.id, pastoral.modoEscala);
+  const mesMinimo = diaAberto.slice(0, 7);
   if (!/^\d{4}-\d{2}$/.test(mes) || mes < mesMinimo) {
     redirect(`${pagina}?servidorId=${encodeURIComponent(servidorId)}`);
   }
@@ -42,13 +43,27 @@ export async function salvarIndisponibilidade(
   const { periodoInicio, periodoFim } = periodoDoMes(mes);
   // Datas inválidas (NaN) caem fora do filtro; repetidas viram uma só (a
   // tabela tem unique servidor+data e o insert falharia inteiro).
+  // Dias antes de `diaAberto` (escala já publicada, ou já passaram) não mudam:
+  // ficam exatamente como estão no banco, independente do que veio do navegador.
+  const inicioAberto = new Date(`${diaAberto}T00:00:00.000Z`);
+  const { data: travadas, error: travadasError } = await supabase
+    .from("ServidorIndisponibilidade")
+    .select("data")
+    .eq("servidorId", servidorId)
+    .gte("data", periodoInicio.toISOString())
+    .lt("data", inicioAberto.toISOString())
+    .returns<{ data: string }[]>();
+  if (travadasError) throw travadasError;
+
   const datasSelecionadas = [
     ...new Map(
-      formData
-        .getAll("datas")
-        .map((valor) => new Date(String(valor)))
-        .filter((data) => data >= periodoInicio && data <= periodoFim)
-        .map((data) => [data.toISOString(), data] as const)
+      [
+        ...(travadas ?? []).map((linha) => new Date(linha.data.endsWith("Z") ? linha.data : `${linha.data}Z`)),
+        ...formData
+          .getAll("datas")
+          .map((valor) => new Date(String(valor)))
+          .filter((data) => data >= inicioAberto && data >= periodoInicio && data <= periodoFim),
+      ].map((data) => [data.toISOString(), data] as const)
     ).values(),
   ];
 

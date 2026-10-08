@@ -107,6 +107,7 @@ export const pastoralSchema = z.object({
     .max(40, "Endereço muito longo")
     .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, "Use só letras minúsculas, números e hífen (ex: ministros)"),
   tipo: z.enum(["COROINHAS", "MINISTROS"], { message: "Selecione o tipo da pastoral" }),
+  modoEscala: z.enum(["MENSAL", "SEMANAL"], { message: "Selecione o modo da escala" }).default("MENSAL"),
   ativo: z.coerce.boolean().default(true),
 });
 

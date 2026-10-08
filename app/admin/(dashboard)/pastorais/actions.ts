@@ -19,6 +19,7 @@ function parsePastoralForm(formData: FormData) {
     nome: formData.get("nome"),
     slug: formData.get("slug"),
     tipo: formData.get("tipo"),
+    modoEscala: formData.get("modoEscala") ?? undefined,
     ativo: formData.get("ativo") === "on",
   });
   if (parsed.success && SLUGS_RESERVADOS_PASTORAL.has(parsed.data.slug)) {

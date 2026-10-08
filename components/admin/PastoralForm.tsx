@@ -9,7 +9,7 @@ import type { PastoralFormState } from "@/app/admin/(dashboard)/pastorais/action
 
 type PastoralFormProps = {
   action: (prevState: PastoralFormState, formData: FormData) => Promise<PastoralFormState>;
-  defaultValues?: { nome: string; slug: string; tipo: string; ativo: boolean };
+  defaultValues?: { nome: string; slug: string; tipo: string; modoEscala: string; ativo: boolean };
   /** Endereço da paróquia, só pra mostrar como fica o link público. */
   slugParoquia: string;
   submitLabel: string;
@@ -36,6 +36,16 @@ export function PastoralForm({ action, defaultValues, slugParoquia, submitLabel 
         </Select>
         <p className="mt-1 text-xs text-muted">
           Coroinhas usam os graus (coroinha, acólito, cerimoniário). Ministros são todos do mesmo nível.
+        </p>
+      </div>
+      <div>
+        <Label htmlFor="modoEscala">Escala</Label>
+        <Select id="modoEscala" name="modoEscala" defaultValue={defaultValues?.modoEscala ?? "MENSAL"}>
+          <option value="MENSAL">Mensal — gera e publica o mês inteiro</option>
+          <option value="SEMANAL">Semanal — gera e publica uma semana (segunda a domingo) por vez</option>
+        </Select>
+        <p className="mt-1 text-xs text-muted">
+          O aviso de indisponibilidade dos servidores continua mês a mês nos dois modos.
         </p>
       </div>
       <div>

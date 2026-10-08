@@ -20,7 +20,8 @@ import { periodoDoMes, paraExibicao, lerDataArmazenada } from "@/lib/occurrences
 import type { EscalaAtribuicaoRow, MissaFuncaoRequisitoRow, MissaRow, MissaOcorrenciaRow } from "@/lib/types";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { ActionForm } from "@/components/ui/ActionForm";
-import { mesEstaPublicado } from "@/lib/escalaPublicada";
+import { listarMesesPublicados } from "@/lib/escalaPublicada";
+import { periodoDaSemana, rotuloCurtoDaSemana, semanasDoMes } from "@/lib/periodoEscala";
 import { materializarOcorrencias } from "@/lib/materializarOcorrencias";
 import {
   gerarEscalaPeriodo,
@@ -96,7 +97,9 @@ export default async function CalendarioPage({
   const periodoFimISO = periodoFim.toISOString();
 
   const hoje = new Date();
-  const publicado = await mesEstaPublicado(pastoral.id, mesAtualParam);
+  const semanal = pastoral.modoEscala === "SEMANAL";
+  const periodosPublicados = new Set(await listarMesesPublicados(pastoral.id));
+  const publicado = periodosPublicados.has(mesAtualParam);
   const linkPublico = `/${paroquia.slug}/${pastoral.slug}/escala`;
 
   return (
@@ -120,6 +123,7 @@ export default async function CalendarioPage({
             </Link>
           </div>
         </div>
+        {semanal ? null : (
         <div className="flex flex-wrap items-center gap-2">
           <AcaoEscalaForm
             action={gerarEscalaPeriodo.bind(null, periodoInicioISO, periodoFimISO)}
@@ -151,8 +155,89 @@ export default async function CalendarioPage({
             Apagar escala
           </AcaoEscalaForm>
         </div>
+        )}
       </div>
 
+      {semanal ? (
+        <div className="mb-4 rounded-xl border border-line bg-surface">
+          <div className="border-b border-line px-4 py-3">
+            <p className="text-sm font-medium text-fg">Escala semanal — segunda a domingo</p>
+            <p className="text-xs text-muted">Cada semana é gerada e publicada separadamente.</p>
+          </div>
+          <ul className="divide-y divide-line/60">
+            {semanasDoMes(mesAtualParam).map((semana) => {
+              const { periodoInicio: inicioSemana, periodoFim: fimSemana } = periodoDaSemana(semana);
+              const semanaPublicada = periodosPublicados.has(semana);
+              const rotulo = rotuloCurtoDaSemana(semana);
+              return (
+                <li key={semana} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                  <div className="flex items-center gap-2.5 text-sm">
+                    <span
+                      aria-hidden
+                      className={clsx("size-2 rounded-full", semanaPublicada ? "animate-pulse-soft bg-ok" : "bg-subtle")}
+                    />
+                    <span className="font-medium tabular-nums text-fg">{rotulo}</span>
+                    <span className={semanaPublicada ? "text-ok" : "text-subtle"}>
+                      {semanaPublicada ? "Publicada" : "Rascunho"}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <AcaoEscalaForm
+                      action={gerarEscalaPeriodo.bind(null, inicioSemana.toISOString(), fimSemana.toISOString())}
+                      variant="secondary"
+                      pendingTitle={`Gerando a semana ${rotulo}`}
+                      successMessage="Escala da semana gerada."
+                    >
+                      Gerar
+                    </AcaoEscalaForm>
+                    <AcaoEscalaForm
+                      action={regenerarEscalaPeriodo.bind(null, inicioSemana.toISOString(), fimSemana.toISOString())}
+                      variant="ghost"
+                      pendingTitle={`Regenerando a semana ${rotulo}`}
+                      successMessage="Escala da semana regenerada."
+                      confirmMessage={`Isso apaga as atribuições geradas automaticamente na semana ${rotulo} e sorteia de novo. Continuar?`}
+                    >
+                      Regenerar
+                    </AcaoEscalaForm>
+                    <AcaoEscalaForm
+                      action={apagarEscalaPeriodo.bind(null, inicioSemana.toISOString(), fimSemana.toISOString())}
+                      variant="danger"
+                      pendingTitle={`Apagando a semana ${rotulo}`}
+                      successMessage="Escala da semana apagada."
+                      mensagens={["Removendo atribuições", "Liberando as vagas"]}
+                      confirmMessage={`Isso apaga TODAS as atribuições da semana ${rotulo}, incluindo as editadas manualmente. Continuar?`}
+                    >
+                      Apagar
+                    </AcaoEscalaForm>
+                    <Link href={`/admin/calendario/confirmar?semana=${semana}`} className={buttonClasses("ghost")}>
+                      Imagem
+                    </Link>
+                    <ActionForm
+                      action={(semanaPublicada ? despublicarEscalaMes : publicarEscalaMes).bind(null, semana)}
+                      successMessage={semanaPublicada ? "Semana despublicada." : "Semana publicada para os servidores."}
+                    >
+                      <SubmitButton
+                        variant={semanaPublicada ? "ghost" : "primary"}
+                        pendingLabel={semanaPublicada ? "Despublicando" : "Publicando"}
+                      >
+                        {semanaPublicada ? "Despublicar" : "Publicar"}
+                      </SubmitButton>
+                    </ActionForm>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+          <p className="border-t border-line px-4 py-2.5 text-xs text-muted">
+            Página dos servidores:{" "}
+            <Link href={linkPublico} target="_blank" className="text-accent hover:text-accent-hover">
+              {linkPublico} ↗
+            </Link>
+          </p>
+        </div>
+      ) : null}
+
+      {semanal ? null : (
       <div
         className={clsx(
           "mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm",
@@ -187,6 +272,7 @@ export default async function CalendarioPage({
           </SubmitButton>
         </ActionForm>
       </div>
+      )}
 
       <div className="overflow-x-auto">
         <div className="grid min-w-[640px] grid-cols-7 gap-px overflow-hidden rounded-xl border border-line bg-line text-xs">

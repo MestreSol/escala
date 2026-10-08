@@ -5,7 +5,15 @@ import { ptBR } from "date-fns/locale";
 import { supabase } from "@/lib/supabase";
 import { Marca } from "@/components/ui/Marca";
 import { EscalaPublica, type MissaPublica } from "@/components/EscalaPublica";
-import { periodoDoMes, paraExibicao, agoraNaParoquia } from "@/lib/occurrences";
+import { agoraNaParoquia } from "@/lib/occurrences";
+import {
+  chaveDaSemana,
+  chaveDoPeriodoDeHoje,
+  chaveValidaParaModo,
+  ehChaveDeSemana,
+  periodoDaChave,
+  rotuloDoPeriodo,
+} from "@/lib/periodoEscala";
 import { buscarEscalaDoPeriodo } from "@/lib/escalaDoPeriodo";
 import { listarMesesPublicados } from "@/lib/escalaPublicada";
 import { pastoralPublica } from "@/lib/paroquia";
@@ -18,8 +26,14 @@ function capitalizar(texto: string) {
   return texto.charAt(0).toUpperCase() + texto.slice(1);
 }
 
-function nomeDoMes(mes: string) {
-  return capitalizar(format(paraExibicao(periodoDoMes(mes).periodoInicio), "MMMM 'de' yyyy", { locale: ptBR }));
+/** Mês ("Outubro de 2026") ou semana ("Semana de 12 a 18 de outubro de 2026"). */
+function nomeDoMes(chave: string) {
+  return rotuloDoPeriodo(chave);
+}
+
+/** Parâmetro da URL do período: ?mes=yyyy-MM ou ?semana=yyyy-MM-dd. */
+function urlDoPeriodo(chave: string) {
+  return ehChaveDeSemana(chave) ? `semana=${chave}` : `mes=${chave}`;
 }
 
 export default async function EscalaPublicaPage({
@@ -27,9 +41,9 @@ export default async function EscalaPublicaPage({
   searchParams,
 }: {
   params: Promise<{ paroquia: string; pastoral: string }>;
-  searchParams: Promise<{ mes?: string }>;
+  searchParams: Promise<{ mes?: string; semana?: string }>;
 }) {
-  const [{ paroquia: slugParoquia, pastoral: slugPastoral }, { mes: mesParam }] = await Promise.all([
+  const [{ paroquia: slugParoquia, pastoral: slugPastoral }, { mes: mesDaUrl, semana: semanaDaUrl }] = await Promise.all([
     params,
     searchParams,
   ]);
@@ -40,15 +54,18 @@ export default async function EscalaPublicaPage({
   const host = cabecalhos.get("x-forwarded-host") ?? cabecalhos.get("host") ?? "localhost:3000";
   const protocolo = cabecalhos.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
   const origem = `${protocolo}://${host}${base}`;
-  const publicados = await listarMesesPublicados(pastoral.id); // mais recente primeiro
+  // Pastoral semanal publica semanas (segunda-feira "yyyy-MM-dd"); mensal publica meses.
+  const modo = pastoral.modoEscala;
+  const publicados = (await listarMesesPublicados(pastoral.id)).filter((chave) => chaveValidaParaModo(modo, chave)); // mais recente primeiro
   const agora = agoraNaParoquia();
-  const mesDeHoje = agora.slice(0, 7);
+  const mesDeHoje = chaveDoPeriodoDeHoje(modo, agora.slice(0, 10));
+  const mesParam = modo === "SEMANAL" ? (semanaDaUrl ? chaveDaSemana(semanaDaUrl) : undefined) : mesDaUrl;
 
-  // Sem ?mes: o mês atual se estiver publicado; senão o próximo publicado;
-  // senão o último publicado.
+  // Sem período na URL: o atual se estiver publicado; senão o próximo
+  // publicado; senão o último publicado.
   const futuros = publicados.filter((m) => m >= mesDeHoje);
   const mes =
-    mesParam && /^\d{4}-\d{2}$/.test(mesParam)
+    mesParam && chaveValidaParaModo(modo, mesParam)
       ? mesParam
       : publicados.includes(mesDeHoje)
         ? mesDeHoje
@@ -63,7 +80,7 @@ export default async function EscalaPublicaPage({
   // nome -> id do servidor, pro link da agenda pessoal (/<paroquia>/<pastoral>/escala/calendario/<id>.ics).
   let idPorNome: Record<string, string> = {};
   if (publicado) {
-    const { periodoInicio, periodoFim } = periodoDoMes(mes);
+    const { periodoInicio, periodoFim } = periodoDaChave(mes);
     const [ocorrencias, servidoresResult] = await Promise.all([
       buscarEscalaDoPeriodo(paroquia.id, pastoral.id, periodoInicio, periodoFim),
       supabase
@@ -113,7 +130,7 @@ export default async function EscalaPublicaPage({
             <nav className="mt-3 flex items-center gap-1 text-sm">
               {mesAnterior ? (
                 <Link
-                  href={`${base}/escala?mes=${mesAnterior}`}
+                  href={`${base}/escala?${urlDoPeriodo(mesAnterior)}`}
                   className="rounded-md px-2 py-1 text-muted transition-colors hover:bg-surface hover:text-fg"
                 >
                   ← {nomeDoMes(mesAnterior)}
@@ -121,7 +138,7 @@ export default async function EscalaPublicaPage({
               ) : null}
               {mesSeguinte ? (
                 <Link
-                  href={`${base}/escala?mes=${mesSeguinte}`}
+                  href={`${base}/escala?${urlDoPeriodo(mesSeguinte)}`}
                   className="rounded-md px-2 py-1 text-muted transition-colors hover:bg-surface hover:text-fg"
                 >
                   {nomeDoMes(mesSeguinte)} →
@@ -149,7 +166,7 @@ export default async function EscalaPublicaPage({
             </p>
             <p className="mt-2 text-sm text-muted">Assim que a coordenação liberar, ela aparece aqui.</p>
             {publicados.length > 0 && !publicados.includes(mes) ? (
-              <Link href={`${base}/escala?mes=${publicados[0]}`} className="mt-5 inline-block text-sm text-accent hover:text-accent-hover">
+              <Link href={`${base}/escala?${urlDoPeriodo(publicados[0])}`} className="mt-5 inline-block text-sm text-accent hover:text-accent-hover">
                 Ver {nomeDoMes(publicados[0]).toLowerCase()} →
               </Link>
             ) : null}

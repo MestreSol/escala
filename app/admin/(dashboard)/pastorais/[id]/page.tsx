@@ -26,7 +26,13 @@ export default async function EditarPastoralPage({ params }: { params: Promise<{
       <h1 className="mb-6 text-2xl font-semibold tracking-tight text-fg">Editar pastoral</h1>
       <PastoralForm
         action={updatePastoral.bind(null, pastoral.id)}
-        defaultValues={{ nome: pastoral.nome, slug: pastoral.slug, tipo: pastoral.tipo, ativo: pastoral.ativo }}
+        defaultValues={{
+          nome: pastoral.nome,
+          slug: pastoral.slug,
+          tipo: pastoral.tipo,
+          modoEscala: pastoral.modoEscala,
+          ativo: pastoral.ativo,
+        }}
         slugParoquia={paroquia.slug}
         submitLabel="Salvar"
       />

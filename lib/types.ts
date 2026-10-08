@@ -13,6 +13,7 @@ export type ParoquiaRow = {
 };
 
 export type TipoPastoral = "COROINHAS" | "MINISTROS";
+export type ModoEscala = "MENSAL" | "SEMANAL";
 
 export type PastoralRow = {
   id: string;
@@ -20,6 +21,7 @@ export type PastoralRow = {
   nome: string;
   slug: string;
   tipo: TipoPastoral;
+  modoEscala: ModoEscala;
   ativo: boolean;
   createdAt: string;
   updatedAt: string;

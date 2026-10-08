@@ -9,7 +9,7 @@ import { diaChave } from "@/lib/scheduleGenerator";
 import { periodoDoMes, paraExibicao, lerDataArmazenada, agoraNaParoquia } from "@/lib/occurrences";
 import { getDatasIndisponiveisDoServidor } from "@/lib/servidorIndisponibilidade";
 import { materializarOcorrencias } from "@/lib/materializarOcorrencias";
-import { listarMesesPublicados, primeiroMesAberto, somarMeses } from "@/lib/escalaPublicada";
+import { listarMesesPublicados, primeiroDiaAberto, somarMeses } from "@/lib/escalaPublicada";
 import { pastoralPublica } from "@/lib/paroquia";
 import { getMissasDaPastoral } from "@/lib/missaPastoral";
 import { salvarIndisponibilidade } from "./actions";
@@ -42,11 +42,17 @@ export default async function IndisponibilidadePage({
 
   // Só dá pra avisar a partir do mês seguinte ao último com escala fechada
   // (ver primeiroMesAberto): pedir um mês fechado/passado cai no primeiro aberto.
-  const mesMinimo = await primeiroMesAberto(pastoral.id);
+  // Pastoral semanal publica uma semana por vez: o mês fica aberto a partir do
+  // dia seguinte à última semana publicada (ver primeiroDiaAberto).
+  const diaAberto = await primeiroDiaAberto(pastoral.id, pastoral.modoEscala);
+  const mesMinimo = diaAberto.slice(0, 7);
   const mes = mesParam && /^\d{4}-\d{2}$/.test(mesParam) && mesParam >= mesMinimo ? mesParam : mesMinimo;
   const { periodoInicio, periodoFim } = periodoDoMes(mes);
   const ultimoMesFechado = somarMeses(mesMinimo, -1);
-  const temMesFechado = (await listarMesesPublicados(pastoral.id)).includes(ultimoMesFechado);
+  const publicados = await listarMesesPublicados(pastoral.id);
+  const semanal = pastoral.modoEscala === "SEMANAL";
+  const temMesFechado = semanal ? publicados.some((chave) => chave.length === 10) : publicados.includes(ultimoMesFechado);
+  const diaAbertoRotulo = `${diaAberto.slice(8, 10)}/${diaAberto.slice(5, 7)}`;
 
   await materializarOcorrencias(paroquia.id, periodoInicio, periodoFim);
 
@@ -109,7 +115,8 @@ export default async function IndisponibilidadePage({
       marcadoInicialmente: datasIndisponiveis.has(diaChave(ancora)),
     };
   });
-  const hoje = agoraNaParoquia().slice(0, 10);
+  // Dias antes de `diaAberto` aparecem travados (como os que já passaram).
+  const hoje = diaAberto > agoraNaParoquia().slice(0, 10) ? diaAberto : agoraNaParoquia().slice(0, 10);
 
   const linkComServidor = (novoMes: string) =>
     `${pagina}?mes=${novoMes}${servidorId ? `&servidorId=${servidorId}` : ""}`;
@@ -162,8 +169,14 @@ export default async function IndisponibilidadePage({
 
             {temMesFechado && mes === mesMinimo ? (
               <p className="mb-4 rounded-md border border-line bg-surface-2 px-3 py-2 text-xs text-muted">
-                A escala de {nomeDoMes(ultimoMesFechado)} já foi fechada — os avisos agora valem a partir de{" "}
-                {nomeDoMes(mesMinimo)}.
+                {semanal ? (
+                  <>A escala já foi publicada até a véspera de {diaAbertoRotulo} — os avisos agora valem a partir de {diaAbertoRotulo}.</>
+                ) : (
+                  <>
+                    A escala de {nomeDoMes(ultimoMesFechado)} já foi fechada — os avisos agora valem a partir de{" "}
+                    {nomeDoMes(mesMinimo)}.
+                  </>
+                )}
               </p>
             ) : null}
 

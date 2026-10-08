@@ -1,5 +1,7 @@
 "use server";
 
+import { chaveValidaParaModo } from "@/lib/periodoEscala";
+import type { ModoEscala } from "@/lib/types";
 import { AvisoAoUsuario, comAvisos } from "@/lib/avisos";
 import { exigirPastoral, exigirPastoralParaPresenca, type UsuarioAtual } from "@/lib/sessao";
 import { garantirDaParoquia, garantirDaPastoral } from "@/lib/paroquia";
@@ -130,7 +132,7 @@ async function montarSlotsEmAberto(paroquiaId: string, pastoralId: string, perio
 }
 
 async function gerarEscalaPeriodoInterno(periodoInicioISO: string, periodoFimISO: string) {
-  const { paroquiaId, pastoralId } = await exigirPastoral();
+  const { paroquiaId, pastoralId, pastoral } = await exigirPastoral();
   const periodoInicio = new Date(periodoInicioISO);
   const periodoFim = new Date(periodoFimISO);
 
@@ -170,6 +172,24 @@ async function gerarEscalaPeriodoInterno(periodoInicioISO: string, periodoFimISO
   for (const a of atribuicoesExistentes) {
     if (a.servidorId) {
       contagemInicial[a.servidorId] = (contagemInicial[a.servidorId] ?? 0) + 1;
+    }
+  }
+
+  // Escala semanal: o equilíbrio também olha as 4 semanas anteriores — senão a
+  // contagem "zera" toda semana e os mesmos podem ser sorteados sempre.
+  if (pastoral.modoEscala === "SEMANAL") {
+    const inicioHistorico = new Date(periodoInicio.getTime() - 28 * 24 * 60 * 60 * 1000);
+    const { data: historico, error: historicoError } = await supabase
+      .from("EscalaAtribuicao")
+      .select("servidorId, ocorrencia:MissaOcorrencia!inner(data)")
+      .eq("pastoralId", pastoralId)
+      .not("servidorId", "is", null)
+      .gte("ocorrencia.data", inicioHistorico.toISOString())
+      .lt("ocorrencia.data", periodoInicio.toISOString())
+      .returns<{ servidorId: string }[]>();
+    if (historicoError) throw historicoError;
+    for (const { servidorId } of historico ?? []) {
+      contagemInicial[servidorId] = (contagemInicial[servidorId] ?? 0) + 1;
     }
   }
 
@@ -615,8 +635,17 @@ async function apagarEscalaPeriodoInterno(periodoInicioISO: string, periodoFimIS
 export async function apagarEscalaPeriodo(...args: Parameters<typeof apagarEscalaPeriodoInterno>) {
   return comAvisos(() => apagarEscalaPeriodoInterno(...args));
 }
+function garantirPeriodoDoModo(modo: ModoEscala, chave: string) {
+  if (!chaveValidaParaModo(modo, chave)) {
+    throw new AvisoAoUsuario(
+      modo === "SEMANAL" ? "Esta pastoral publica a escala por semana." : "Esta pastoral publica a escala por mês."
+    );
+  }
+}
+
 async function publicarEscalaMesInterno(mes: string) {
-  const { paroquiaId, pastoralId } = await exigirPastoral();
+  const { paroquiaId, pastoralId, pastoral } = await exigirPastoral();
+  garantirPeriodoDoModo(pastoral.modoEscala, mes);
   await publicarMes(paroquiaId, pastoralId, mes);
   revalidatePath("/admin/calendario");
   revalidatePath("/[paroquia]/[pastoral]/escala", "page");
@@ -627,7 +656,8 @@ export async function publicarEscalaMes(...args: Parameters<typeof publicarEscal
   return comAvisos(() => publicarEscalaMesInterno(...args));
 }
 async function despublicarEscalaMesInterno(mes: string) {
-  const { pastoralId } = await exigirPastoral();
+  const { pastoralId, pastoral } = await exigirPastoral();
+  garantirPeriodoDoModo(pastoral.modoEscala, mes);
   await despublicarMes(pastoralId, mes);
   revalidatePath("/admin/calendario");
   revalidatePath("/[paroquia]/[pastoral]/escala", "page");

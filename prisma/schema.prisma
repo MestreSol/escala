@@ -55,6 +55,13 @@ model Paroquia {
 
 /// COROINHAS usa a hierarquia de Grau; MINISTROS é nível único (todo
 /// servidor fica com o grau mais baixo e toda função exige só ele).
+/// Ritmo da escala da pastoral: o mês inteiro de uma vez, ou uma semana
+/// (segunda a domingo) de cada vez — gerar e publicar seguem esse ritmo.
+enum ModoEscala {
+  MENSAL
+  SEMANAL
+}
+
 enum TipoPastoral {
   COROINHAS
   MINISTROS
@@ -72,6 +79,7 @@ model Pastoral {
   /// Segundo segmento da URL pública (ex: /matriz/coroinhas/escala).
   slug       String
   tipo       TipoPastoral
+  modoEscala ModoEscala   @default(MENSAL)
   ativo      Boolean      @default(true)
   createdAt  DateTime     @default(now())
   updatedAt  DateTime     @updatedAt
@@ -343,7 +351,9 @@ model EscalaPublicada {
   id          String   @id @default(cuid())
   paroquiaId  String
   pastoralId  String
-  /// Mês no formato "yyyy-MM" (ex: "2026-09").
+  /// Período publicado: "yyyy-MM" (ex: "2026-09") nas pastorais de escala
+  /// mensal, ou a segunda-feira da semana "yyyy-MM-dd" (ex: "2026-10-12")
+  /// nas de escala semanal (ver Pastoral.modoEscala e lib/periodoEscala.ts).
   mes         String
   publicadaEm DateTime @default(now())
 

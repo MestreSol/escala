@@ -116,7 +116,9 @@ export async function desenharEscala(opcoes: {
             </div>
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
-            <div style={{ display: "flex", fontSize: px(34), fontWeight: 700, color: cor.texto }}>{tituloMes}</div>
+            <div style={{ display: "flex", fontSize: px(tituloMes.length > 28 ? 26 : 34), fontWeight: 700, color: cor.texto }}>
+              {tituloMes}
+            </div>
             {rodape ? <div style={{ display: "flex", fontSize: px(14), color: cor.secundario }}>{rodape}</div> : null}
           </div>
           <div style={{ display: "flex", fontSize: px(16), color: cor.secundario, marginTop: px(4) }}>
