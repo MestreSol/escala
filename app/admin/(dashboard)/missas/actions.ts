@@ -1,5 +1,6 @@
 "use server";
 
+import { AvisoAoUsuario, comAvisos, comAvisosNoFormulario } from "@/lib/avisos";
 import { cuidaDaParoquiaToda, exigirPastoral } from "@/lib/sessao";
 import { garantirDaParoquia } from "@/lib/paroquia";
 import { missaUsadaPorOutraPastoral, setConfigMissa, type ConfigMissaPastoral } from "@/lib/missaPastoral";
@@ -72,7 +73,7 @@ function paraConfigDaPastoral(dados: MissaInput): ConfigMissaPastoral {
   };
 }
 
-export async function createMissa(_prevState: MissaFormState, formData: FormData): Promise<MissaFormState> {
+async function createMissaInterno(_prevState: MissaFormState, formData: FormData): Promise<MissaFormState> {
   const { paroquiaId, pastoralId } = await exigirPastoral();
   const parsed = parseMissaForm(formData);
   if (!parsed.success) {
@@ -90,7 +91,11 @@ export async function createMissa(_prevState: MissaFormState, formData: FormData
   redirect(`/admin/missas/${id}`);
 }
 
-export async function updateMissa(
+
+export async function createMissa(...args: Parameters<typeof createMissaInterno>) {
+  return comAvisosNoFormulario(() => createMissaInterno(...args));
+}
+async function updateMissaInterno(
   id: string,
   _prevState: MissaFormState,
   formData: FormData
@@ -115,12 +120,16 @@ export async function updateMissa(
   return {};
 }
 
-export async function deleteMissa(id: string) {
+
+export async function updateMissa(...args: Parameters<typeof updateMissaInterno>) {
+  return comAvisosNoFormulario(() => updateMissaInterno(...args));
+}
+async function deleteMissaInterno(id: string) {
   const { usuario, paroquiaId, pastoralId } = await exigirPastoral();
   await garantirDaParoquia("Missa", id, paroquiaId);
   // A missa é da paróquia: excluir apaga também a escala das outras pastorais.
   if (!cuidaDaParoquiaToda(usuario) && (await missaUsadaPorOutraPastoral(id, pastoralId))) {
-    throw new Error("Outra pastoral também serve nesta missa. Só o administrador da paróquia pode excluí-la.");
+    throw new AvisoAoUsuario("Outra pastoral também serve nesta missa. Só o administrador da paróquia pode excluí-la.");
   }
   const { error } = await supabase.from("Missa").delete().eq("id", id).eq("paroquiaId", paroquiaId);
   if (error) throw error;
@@ -129,7 +138,11 @@ export async function deleteMissa(id: string) {
   redirect("/admin/missas");
 }
 
-export async function saveMissaRequisitos(missaId: string, formData: FormData) {
+
+export async function deleteMissa(...args: Parameters<typeof deleteMissaInterno>) {
+  return comAvisos(() => deleteMissaInterno(...args));
+}
+async function saveMissaRequisitosInterno(missaId: string, formData: FormData) {
   const { paroquiaId, pastoralId } = await exigirPastoral();
   await garantirDaParoquia("Missa", missaId, paroquiaId);
   // Só as funções desta pastoral: as exigências das outras pastorais na
@@ -196,4 +209,9 @@ export async function saveMissaRequisitos(missaId: string, formData: FormData) {
   }
 
   revalidatePath(`/admin/missas/${missaId}`);
+}
+
+
+export async function saveMissaRequisitos(...args: Parameters<typeof saveMissaRequisitosInterno>) {
+  return comAvisos(() => saveMissaRequisitosInterno(...args));
 }

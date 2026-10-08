@@ -1,5 +1,6 @@
 "use server";
 
+import { AvisoAoUsuario, comAvisos, comAvisosNoFormulario } from "@/lib/avisos";
 import { exigirPastoral } from "@/lib/sessao";
 import { garantirDaParoquia, garantirDaPastoral } from "@/lib/paroquia";
 import { GRAU_UNICO, usaGraus } from "@/lib/constants";
@@ -12,7 +13,7 @@ import { setVinculosDoServidor } from "@/lib/servidorVinculo";
 import { enviarFotoServidor } from "@/lib/storage";
 import type { ServidorFormState } from "@/lib/types";
 
-export async function updateServidor(
+async function updateServidorInterno(
   id: string,
   _prevState: ServidorFormState,
   formData: FormData
@@ -58,7 +59,11 @@ export async function updateServidor(
   redirect("/admin/servidores");
 }
 
-export async function saveServidorVinculos(servidorId: string, formData: FormData) {
+
+export async function updateServidor(...args: Parameters<typeof updateServidorInterno>) {
+  return comAvisosNoFormulario(() => updateServidorInterno(...args));
+}
+async function saveServidorVinculosInterno(servidorId: string, formData: FormData) {
   const { pastoralId } = await exigirPastoral();
   await garantirDaPastoral("Servidor", servidorId, pastoralId);
   const { data: outrosServidores, error } = await supabase
@@ -79,12 +84,16 @@ export async function saveServidorVinculos(servidorId: string, formData: FormDat
   revalidatePath(`/admin/servidores/${servidorId}`);
 }
 
-export async function atualizarFotoServidor(servidorId: string, formData: FormData) {
+
+export async function saveServidorVinculos(...args: Parameters<typeof saveServidorVinculosInterno>) {
+  return comAvisos(() => saveServidorVinculosInterno(...args));
+}
+async function atualizarFotoServidorInterno(servidorId: string, formData: FormData) {
   const { pastoralId } = await exigirPastoral();
   await garantirDaPastoral("Servidor", servidorId, pastoralId);
   const arquivo = formData.get("foto");
   if (!(arquivo instanceof File) || arquivo.size === 0) {
-    throw new Error("Selecione uma imagem.");
+    throw new AvisoAoUsuario("Selecione uma imagem.");
   }
 
   const fotoUrl = await enviarFotoServidor(servidorId, arquivo);
@@ -96,7 +105,11 @@ export async function atualizarFotoServidor(servidorId: string, formData: FormDa
   revalidatePath("/admin/servidores");
 }
 
-export async function deleteServidor(id: string) {
+
+export async function atualizarFotoServidor(...args: Parameters<typeof atualizarFotoServidorInterno>) {
+  return comAvisos(() => atualizarFotoServidorInterno(...args));
+}
+async function deleteServidorInterno(id: string) {
   const { pastoralId } = await exigirPastoral();
   const { error } = await supabase.from("Servidor").delete().eq("id", id).eq("pastoralId", pastoralId);
   if (error) throw error;
@@ -105,7 +118,11 @@ export async function deleteServidor(id: string) {
   redirect("/admin/servidores");
 }
 
-export async function alternarExperiente(servidorId: string) {
+
+export async function deleteServidor(...args: Parameters<typeof deleteServidorInterno>) {
+  return comAvisos(() => deleteServidorInterno(...args));
+}
+async function alternarExperienteInterno(servidorId: string) {
   const { pastoral } = await exigirPastoral();
   await garantirDaPastoral("Servidor", servidorId, pastoral.id);
   const { data: servidor, error } = await supabase
@@ -123,4 +140,9 @@ export async function alternarExperiente(servidorId: string) {
 
   revalidatePath("/admin/servidores");
   revalidatePath(`/admin/servidores/${servidorId}`);
+}
+
+
+export async function alternarExperiente(...args: Parameters<typeof alternarExperienteInterno>) {
+  return comAvisos(() => alternarExperienteInterno(...args));
 }

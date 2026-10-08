@@ -1,5 +1,6 @@
 "use server";
 
+import { AvisoAoUsuario, comAvisos, comAvisosNoFormulario } from "@/lib/avisos";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -33,7 +34,7 @@ function erroAoSalvar(error: { message: string; code?: string }): PastoralFormSt
   return erroDoBanco(error, "pastoral");
 }
 
-export async function createPastoral(_prevState: PastoralFormState, formData: FormData): Promise<PastoralFormState> {
+async function createPastoralInterno(_prevState: PastoralFormState, formData: FormData): Promise<PastoralFormState> {
   const { paroquiaId } = await exigirAdminDaParoquia();
   const parsed = parsePastoralForm(formData);
   if (!parsed.success) return { error: parsed.error };
@@ -47,7 +48,11 @@ export async function createPastoral(_prevState: PastoralFormState, formData: Fo
   redirect("/admin/pastorais");
 }
 
-export async function updatePastoral(
+
+export async function createPastoral(...args: Parameters<typeof createPastoralInterno>) {
+  return comAvisosNoFormulario(() => createPastoralInterno(...args));
+}
+async function updatePastoralInterno(
   id: string,
   _prevState: PastoralFormState,
   formData: FormData
@@ -79,8 +84,12 @@ export async function updatePastoral(
   return {};
 }
 
+
+export async function updatePastoral(...args: Parameters<typeof updatePastoralInterno>) {
+  return comAvisosNoFormulario(() => updatePastoralInterno(...args));
+}
 /** Escolhe a pastoral em que o administrador da paróquia vai trabalhar no painel (ver obterPastoralAtual). */
-export async function entrarNaPastoral(id: string) {
+async function entrarNaPastoralInterno(id: string) {
   const { paroquiaId } = await exigirAdminDaParoquia();
   const { data, error } = await supabase
     .from("Pastoral")
@@ -89,7 +98,7 @@ export async function entrarNaPastoral(id: string) {
     .eq("paroquiaId", paroquiaId)
     .maybeSingle();
   if (error) throw error;
-  if (!data) throw new Error("Pastoral não encontrada.");
+  if (!data) throw new AvisoAoUsuario("Pastoral não encontrada.");
 
   const cookieStore = await cookies();
   cookieStore.set(PASTORAL_COOKIE_NAME, id, {
@@ -100,4 +109,9 @@ export async function entrarNaPastoral(id: string) {
   });
 
   redirect("/admin");
+}
+
+
+export async function entrarNaPastoral(...args: Parameters<typeof entrarNaPastoralInterno>) {
+  return comAvisos(() => entrarNaPastoralInterno(...args));
 }

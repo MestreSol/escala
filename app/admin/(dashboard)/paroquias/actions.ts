@@ -1,5 +1,6 @@
 "use server";
 
+import { AvisoAoUsuario, comAvisos, comAvisosNoFormulario } from "@/lib/avisos";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -31,7 +32,7 @@ function erroAoSalvar(error: { message: string; code?: string }): ParoquiaFormSt
   return erroDoBanco(error, "paróquia");
 }
 
-export async function createParoquia(_prevState: ParoquiaFormState, formData: FormData): Promise<ParoquiaFormState> {
+async function createParoquiaInterno(_prevState: ParoquiaFormState, formData: FormData): Promise<ParoquiaFormState> {
   await exigirSuperadmin();
   const parsed = parseParoquiaForm(formData);
   if (!parsed.success) return { error: parsed.error };
@@ -45,7 +46,11 @@ export async function createParoquia(_prevState: ParoquiaFormState, formData: Fo
   redirect("/admin/paroquias");
 }
 
-export async function updateParoquia(
+
+export async function createParoquia(...args: Parameters<typeof createParoquiaInterno>) {
+  return comAvisosNoFormulario(() => createParoquiaInterno(...args));
+}
+async function updateParoquiaInterno(
   id: string,
   _prevState: ParoquiaFormState,
   formData: FormData
@@ -65,12 +70,16 @@ export async function updateParoquia(
   return {};
 }
 
+
+export async function updateParoquia(...args: Parameters<typeof updateParoquiaInterno>) {
+  return comAvisosNoFormulario(() => updateParoquiaInterno(...args));
+}
 /** Escolhe a paróquia em que o SUPERADMIN vai trabalhar no painel (ver obterParoquiaAtual). */
-export async function entrarNaParoquia(id: string) {
+async function entrarNaParoquiaInterno(id: string) {
   await exigirSuperadmin();
   const { data, error } = await supabase.from("Paroquia").select("id").eq("id", id).maybeSingle();
   if (error) throw error;
-  if (!data) throw new Error("Paróquia não encontrada.");
+  if (!data) throw new AvisoAoUsuario("Paróquia não encontrada.");
 
   const cookieStore = await cookies();
   cookieStore.set(PAROQUIA_COOKIE_NAME, id, {
@@ -83,4 +92,9 @@ export async function entrarNaParoquia(id: string) {
   cookieStore.delete(PASTORAL_COOKIE_NAME);
 
   redirect("/admin");
+}
+
+
+export async function entrarNaParoquia(...args: Parameters<typeof entrarNaParoquiaInterno>) {
+  return comAvisos(() => entrarNaParoquiaInterno(...args));
 }

@@ -6,6 +6,7 @@ import { SubmitButton } from "@/components/ui/SubmitButton";
 import { ProgressBar, Spinner } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { executarComToast } from "@/components/ui/ActionForm";
+import type { ResultadoAcao } from "@/lib/avisos";
 import { Button, type ButtonVariant } from "@/components/ui/Button";
 
 const MENSAGENS_PADRAO = [
@@ -29,7 +30,7 @@ export function AcaoEscalaForm({
   successMessage,
   mensagens = MENSAGENS_PADRAO,
 }: {
-  action: () => Promise<void>;
+  action: () => Promise<ResultadoAcao>;
   children: ReactNode;
   variant?: ButtonVariant;
   confirmMessage?: string;

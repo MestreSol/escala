@@ -1,3 +1,4 @@
+import { AvisoAoUsuario } from "@/lib/avisos";
 import "server-only";
 import { cache } from "react";
 import { cookies } from "next/headers";
@@ -120,7 +121,7 @@ export const obterPastoralAtual = cache(async (): Promise<PastoralAtual | null> 
 export async function exigirUsuario(): Promise<UsuarioAtual> {
   const usuario = await obterUsuarioAtual();
   if (!usuario) {
-    throw new Error("Sua sessão expirou. Entre de novo.");
+    throw new AvisoAoUsuario("Sua sessão expirou. Entre de novo.");
   }
   return usuario;
 }
@@ -128,7 +129,7 @@ export async function exigirUsuario(): Promise<UsuarioAtual> {
 async function contextoDaParoquia(usuario: UsuarioAtual): Promise<{ usuario: UsuarioAtual; paroquiaId: string }> {
   const paroquia = await obterParoquiaAtual();
   if (!paroquia) {
-    throw new Error("Escolha uma paróquia antes de continuar.");
+    throw new AvisoAoUsuario("Escolha uma paróquia antes de continuar.");
   }
   return { usuario, paroquiaId: paroquia.id };
 }
@@ -137,7 +138,7 @@ async function contextoDaPastoral(usuario: UsuarioAtual) {
   const contexto = await contextoDaParoquia(usuario);
   const pastoral = await obterPastoralAtual();
   if (!pastoral) {
-    throw new Error("Escolha uma pastoral antes de continuar.");
+    throw new AvisoAoUsuario("Escolha uma pastoral antes de continuar.");
   }
   return { ...contexto, pastoral, pastoralId: pastoral.id };
 }
@@ -149,7 +150,7 @@ async function contextoDaPastoral(usuario: UsuarioAtual) {
 export async function exigirParoquia(): Promise<{ usuario: UsuarioAtual; paroquiaId: string }> {
   const usuario = await exigirUsuario();
   if (usuario.papel === "PRESENCA") {
-    throw new Error("Seu usuário só pode registrar presença.");
+    throw new AvisoAoUsuario("Seu usuário só pode registrar presença.");
   }
   return contextoDaParoquia(usuario);
 }
@@ -163,7 +164,7 @@ export async function exigirPastoral(): Promise<{
 }> {
   const usuario = await exigirUsuario();
   if (usuario.papel === "PRESENCA") {
-    throw new Error("Seu usuário só pode registrar presença.");
+    throw new AvisoAoUsuario("Seu usuário só pode registrar presença.");
   }
   return contextoDaPastoral(usuario);
 }
@@ -195,7 +196,7 @@ export async function paroquiaDoPainel(): Promise<ParoquiaAtual> {
   const paroquia = await obterParoquiaAtual();
   if (!paroquia) {
     if (usuario.papel === "SUPERADMIN") redirect("/admin/paroquias");
-    throw new Error("Seu usuário não está ligado a nenhuma paróquia.");
+    throw new AvisoAoUsuario("Seu usuário não está ligado a nenhuma paróquia.");
   }
   return paroquia;
 }
@@ -206,7 +207,7 @@ export async function pastoralDoPainel(): Promise<{ paroquia: ParoquiaAtual; pas
   const pastoral = await obterPastoralAtual();
   if (!pastoral) {
     const usuario = await obterUsuarioAtual();
-    if (usuario?.pastoralId) throw new Error("A pastoral do seu usuário não existe mais.");
+    if (usuario?.pastoralId) throw new AvisoAoUsuario("A pastoral do seu usuário não existe mais.");
     redirect("/admin/pastorais");
   }
   return { paroquia, pastoral };
@@ -223,10 +224,10 @@ export async function pastoralDaPresenca(): Promise<{ paroquia: ParoquiaAtual; p
   const [paroquia, pastoral] = await Promise.all([obterParoquiaAtual(), obterPastoralAtual()]);
   if (!paroquia) {
     if (usuario.papel === "SUPERADMIN") redirect("/admin/paroquias");
-    throw new Error("Seu usuário não está ligado a nenhuma paróquia.");
+    throw new AvisoAoUsuario("Seu usuário não está ligado a nenhuma paróquia.");
   }
   if (!pastoral) {
-    if (usuario.pastoralId) throw new Error("A pastoral do seu usuário não existe mais.");
+    if (usuario.pastoralId) throw new AvisoAoUsuario("A pastoral do seu usuário não existe mais.");
     redirect("/admin/pastorais");
   }
   return { paroquia, pastoral };
@@ -245,7 +246,7 @@ export function cuidaDaParoquiaToda(usuario: Pick<UsuarioAtual, "papel" | "pasto
 export async function exigirAdmin(): Promise<{ usuario: UsuarioAtual; paroquiaId: string }> {
   const contexto = await exigirParoquia();
   if (!podeGerenciarUsuarios(contexto.usuario)) {
-    throw new Error("Apenas administradores podem fazer isso.");
+    throw new AvisoAoUsuario("Apenas administradores podem fazer isso.");
   }
   return contexto;
 }
@@ -254,7 +255,7 @@ export async function exigirAdmin(): Promise<{ usuario: UsuarioAtual; paroquiaId
 export async function exigirAdminDaParoquia(): Promise<{ usuario: UsuarioAtual; paroquiaId: string }> {
   const contexto = await exigirParoquia();
   if (!cuidaDaParoquiaToda(contexto.usuario)) {
-    throw new Error("Apenas o administrador da paróquia pode fazer isso.");
+    throw new AvisoAoUsuario("Apenas o administrador da paróquia pode fazer isso.");
   }
   return contexto;
 }
@@ -263,7 +264,7 @@ export async function exigirAdminDaParoquia(): Promise<{ usuario: UsuarioAtual; 
 export async function exigirSuperadmin(): Promise<UsuarioAtual> {
   const usuario = await exigirUsuario();
   if (usuario.papel !== "SUPERADMIN") {
-    throw new Error("Apenas o administrador geral pode fazer isso.");
+    throw new AvisoAoUsuario("Apenas o administrador geral pode fazer isso.");
   }
   return usuario;
 }

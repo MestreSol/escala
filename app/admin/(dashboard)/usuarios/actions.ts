@@ -1,5 +1,6 @@
 "use server";
 
+import { AvisoAoUsuario, comAvisos, comAvisosNoFormulario } from "@/lib/avisos";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import bcrypt from "bcryptjs";
@@ -9,7 +10,7 @@ import { usuarioSchema } from "@/lib/validations";
 import { exigirAdmin } from "@/lib/sessao";
 import type { UsuarioFormState } from "@/lib/types";
 
-export async function createUsuario(_prevState: UsuarioFormState, formData: FormData): Promise<UsuarioFormState> {
+async function createUsuarioInterno(_prevState: UsuarioFormState, formData: FormData): Promise<UsuarioFormState> {
   const { usuario: usuarioLogado, paroquiaId } = await exigirAdmin();
 
   const parsed = usuarioSchema.safeParse({
@@ -58,10 +59,14 @@ export async function createUsuario(_prevState: UsuarioFormState, formData: Form
   redirect("/admin/usuarios");
 }
 
-export async function deleteUsuario(id: string) {
+
+export async function createUsuario(...args: Parameters<typeof createUsuarioInterno>) {
+  return comAvisosNoFormulario(() => createUsuarioInterno(...args));
+}
+async function deleteUsuarioInterno(id: string) {
   const { usuario: usuarioLogado, paroquiaId } = await exigirAdmin();
   if (usuarioLogado.id === id) {
-    throw new Error("Você não pode excluir seu próprio usuário.");
+    throw new AvisoAoUsuario("Você não pode excluir seu próprio usuário.");
   }
 
   let consulta = supabase.from("Usuario").delete().eq("id", id).eq("paroquiaId", paroquiaId);
@@ -71,4 +76,9 @@ export async function deleteUsuario(id: string) {
   if (error) throw error;
 
   revalidatePath("/admin/usuarios");
+}
+
+
+export async function deleteUsuario(...args: Parameters<typeof deleteUsuarioInterno>) {
+  return comAvisos(() => deleteUsuarioInterno(...args));
 }

@@ -1,3 +1,4 @@
+import { AvisoAoUsuario } from "@/lib/avisos";
 import "server-only";
 import { cache } from "react";
 import { notFound, redirect } from "next/navigation";
@@ -124,7 +125,7 @@ export async function garantirDaParoquia(tabela: TabelaComParoquia, ids: string 
     .returns<{ id: string }[]>();
   if (error) throw error;
   if ((data ?? []).length !== lista.length) {
-    throw new Error("Registro não encontrado.");
+    throw new AvisoAoUsuario("Registro não encontrado.");
   }
 }
 
@@ -141,7 +142,7 @@ export async function garantirDaPastoral(tabela: TabelaComPastoral, ids: string 
     .returns<{ id: string }[]>();
   if (error) throw error;
   if ((data ?? []).length !== lista.length) {
-    throw new Error("Registro não encontrado.");
+    throw new AvisoAoUsuario("Registro não encontrado.");
   }
 }
 

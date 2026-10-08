@@ -1,5 +1,6 @@
 "use server";
 
+import { comAvisos, comAvisosNoFormulario } from "@/lib/avisos";
 import { exigirPastoral } from "@/lib/sessao";
 import { garantirDaPastoral } from "@/lib/paroquia";
 import { GRAU_UNICO, usaGraus } from "@/lib/constants";
@@ -25,7 +26,7 @@ function parseFuncaoForm(formData: FormData, tipo: TipoPastoral) {
   });
 }
 
-export async function createFuncao(_prevState: FuncaoFormState, formData: FormData): Promise<FuncaoFormState> {
+async function createFuncaoInterno(_prevState: FuncaoFormState, formData: FormData): Promise<FuncaoFormState> {
   const { paroquiaId, pastoral } = await exigirPastoral();
   const parsed = parseFuncaoForm(formData, pastoral.tipo);
   if (!parsed.success) {
@@ -41,7 +42,11 @@ export async function createFuncao(_prevState: FuncaoFormState, formData: FormDa
   redirect("/admin/funcoes");
 }
 
-export async function updateFuncao(
+
+export async function createFuncao(...args: Parameters<typeof createFuncaoInterno>) {
+  return comAvisosNoFormulario(() => createFuncaoInterno(...args));
+}
+async function updateFuncaoInterno(
   id: string,
   _prevState: FuncaoFormState,
   formData: FormData
@@ -64,7 +69,11 @@ export async function updateFuncao(
   return {};
 }
 
-export async function deleteFuncao(id: string) {
+
+export async function updateFuncao(...args: Parameters<typeof updateFuncaoInterno>) {
+  return comAvisosNoFormulario(() => updateFuncaoInterno(...args));
+}
+async function deleteFuncaoInterno(id: string) {
   const { pastoralId } = await exigirPastoral();
   const { error } = await supabase.from("Funcao").delete().eq("id", id).eq("pastoralId", pastoralId);
   if (error) throw error;
@@ -73,7 +82,11 @@ export async function deleteFuncao(id: string) {
   redirect("/admin/funcoes");
 }
 
-export async function saveFuncaoAcumulacoes(funcaoId: string, formData: FormData) {
+
+export async function deleteFuncao(...args: Parameters<typeof deleteFuncaoInterno>) {
+  return comAvisos(() => deleteFuncaoInterno(...args));
+}
+async function saveFuncaoAcumulacoesInterno(funcaoId: string, formData: FormData) {
   const { pastoralId } = await exigirPastoral();
   await garantirDaPastoral("Funcao", funcaoId, pastoralId);
   const { data: outrasFuncoes, error } = await supabase
@@ -94,7 +107,11 @@ export async function saveFuncaoAcumulacoes(funcaoId: string, formData: FormData
   revalidatePath(`/admin/funcoes/${funcaoId}`);
 }
 
-export async function saveFuncaoPares(funcaoId: string, formData: FormData) {
+
+export async function saveFuncaoAcumulacoes(...args: Parameters<typeof saveFuncaoAcumulacoesInterno>) {
+  return comAvisos(() => saveFuncaoAcumulacoesInterno(...args));
+}
+async function saveFuncaoParesInterno(funcaoId: string, formData: FormData) {
   const { pastoralId } = await exigirPastoral();
   await garantirDaPastoral("Funcao", funcaoId, pastoralId);
   const { data: outrasFuncoes, error } = await supabase
@@ -113,4 +130,9 @@ export async function saveFuncaoPares(funcaoId: string, formData: FormData) {
   await setFuncoesPareadas(pastoralId, funcaoId, selecionadas);
 
   revalidatePath(`/admin/funcoes/${funcaoId}`);
+}
+
+
+export async function saveFuncaoPares(...args: Parameters<typeof saveFuncaoParesInterno>) {
+  return comAvisos(() => saveFuncaoParesInterno(...args));
 }

@@ -4,12 +4,13 @@ import { useFormStatus } from "react-dom";
 import { Select } from "@/components/ui/Field";
 import { Spinner } from "@/components/ui/Spinner";
 import { executarComToast } from "@/components/ui/ActionForm";
+import type { ResultadoAcao } from "@/lib/avisos";
 
 export function PresencaSelect({
   action,
   defaultValue,
 }: {
-  action: (formData: FormData) => Promise<void>;
+  action: (formData: FormData) => Promise<ResultadoAcao>;
   defaultValue: boolean | null;
 }) {
   return (

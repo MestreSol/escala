@@ -5,6 +5,7 @@ import { useFormStatus } from "react-dom";
 import { Spinner } from "@/components/ui/Spinner";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { executarComToast } from "@/components/ui/ActionForm";
+import type { ResultadoAcao } from "@/lib/avisos";
 
 export function DeleteButton({
   action,
@@ -12,7 +13,7 @@ export function DeleteButton({
   label = "Excluir",
   successMessage = "Excluído.",
 }: {
-  action: () => Promise<void>;
+  action: () => Promise<ResultadoAcao>;
   confirmMessage: string;
   label?: string;
   successMessage?: string;

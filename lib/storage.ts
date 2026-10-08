@@ -1,3 +1,4 @@
+import { AvisoAoUsuario } from "@/lib/avisos";
 import "server-only";
 import { supabase } from "@/lib/supabase";
 
@@ -31,15 +32,15 @@ function tipoPelaAssinatura(bytes: Uint8Array): string | null {
 /** Envia a foto de um servidor para o Storage e devolve a URL pública. */
 export async function enviarFotoServidor(servidorId: string, arquivo: File): Promise<string> {
   if (!/^[0-9a-f-]{8,64}$/i.test(servidorId)) {
-    throw new Error("Servidor inválido.");
+    throw new AvisoAoUsuario("Servidor inválido.");
   }
   if (arquivo.size > TAMANHO_MAXIMO_BYTES) {
-    throw new Error("A imagem deve ter no máximo 5MB.");
+    throw new AvisoAoUsuario("A imagem deve ter no máximo 5MB.");
   }
   const tipoReal = tipoPelaAssinatura(new Uint8Array(await arquivo.slice(0, 12).arrayBuffer()));
   const extensao = tipoReal ? EXTENSAO_POR_TIPO[tipoReal] : undefined;
   if (!tipoReal || !extensao) {
-    throw new Error("Formato de imagem não suportado. Envie um JPG, PNG ou WEBP.");
+    throw new AvisoAoUsuario("Formato de imagem não suportado. Envie um JPG, PNG ou WEBP.");
   }
 
   // Nome único por envio — evita servir uma versão em cache do navegador

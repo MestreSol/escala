@@ -2,10 +2,11 @@
 
 import { ReactNode } from "react";
 import { toast } from "sonner";
+import type { ResultadoAcao } from "@/lib/avisos";
 
 type ActionFormProps = {
   /** Server action que não devolve estado (revalidatePath e, às vezes, redirect). */
-  action: (formData: FormData) => Promise<void>;
+  action: (formData: FormData) => Promise<ResultadoAcao>;
   successMessage?: string;
   className?: string;
   children: ReactNode;
@@ -21,12 +22,18 @@ function isNextRedirectError(error: unknown): boolean {
  * Next chega como erro especial e é repassado (senão o redirect não acontece).
  */
 export async function executarComToast(
-  executar: () => Promise<void>,
+  executar: () => Promise<ResultadoAcao>,
   successMessage: string,
   erroPadrao = "Algo deu errado."
 ): Promise<void> {
   try {
-    await executar();
+    // Aviso devolvido pela action (ver lib/avisos.ts): o texto chega inteiro
+    // mesmo em produção, ao contrário de um erro lançado.
+    const resultado = await executar();
+    if (resultado && "aviso" in resultado) {
+      toast.error(resultado.aviso);
+      return;
+    }
     toast.success(successMessage);
   } catch (error) {
     if (isNextRedirectError(error)) throw error;

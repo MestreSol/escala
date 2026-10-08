@@ -1,5 +1,6 @@
 "use server";
 
+import { AvisoAoUsuario, comAvisos } from "@/lib/avisos";
 import { exigirPastoral, exigirPastoralParaPresenca, type UsuarioAtual } from "@/lib/sessao";
 import { garantirDaParoquia, garantirDaPastoral } from "@/lib/paroquia";
 import { CONFIG_PADRAO, getConfigMissasMap } from "@/lib/missaPastoral";
@@ -128,7 +129,7 @@ async function montarSlotsEmAberto(paroquiaId: string, pastoralId: string, perio
   return { slots, atribuicoesExistentes };
 }
 
-export async function gerarEscalaPeriodo(periodoInicioISO: string, periodoFimISO: string) {
+async function gerarEscalaPeriodoInterno(periodoInicioISO: string, periodoFimISO: string) {
   const { paroquiaId, pastoralId } = await exigirPastoral();
   const periodoInicio = new Date(periodoInicioISO);
   const periodoFim = new Date(periodoFimISO);
@@ -225,6 +226,10 @@ export async function gerarEscalaPeriodo(periodoInicioISO: string, periodoFimISO
   revalidatePath("/admin/calendario");
 }
 
+
+export async function gerarEscalaPeriodo(...args: Parameters<typeof gerarEscalaPeriodoInterno>) {
+  return comAvisos(() => gerarEscalaPeriodoInterno(...args));
+}
 async function validarSemConflitoNoDia(servidorId: string, ocorrenciaId: string, servidorNome: string) {
   const { data: ocorrenciaAtual, error: ocorrenciaError } = await supabase
     .from("MissaOcorrencia")
@@ -250,7 +255,7 @@ async function validarSemConflitoNoDia(servidorId: string, ocorrenciaId: string,
   );
 
   if (temConflito) {
-    throw new Error(`${servidorNome} já está escalado(a) em outra missa neste mesmo dia.`);
+    throw new AvisoAoUsuario(`${servidorNome} já está escalado(a) em outra missa neste mesmo dia.`);
   }
 
   const { data: indisponibilidades, error: indisponibilidadeError } = await supabase
@@ -262,11 +267,11 @@ async function validarSemConflitoNoDia(servidorId: string, ocorrenciaId: string,
 
   const indisponivelNoDia = (indisponibilidades ?? []).some((i) => diaChave(lerDataArmazenada(i.data)) === diaAtual);
   if (indisponivelNoDia) {
-    throw new Error(`${servidorNome} avisou que não pode servir neste dia.`);
+    throw new AvisoAoUsuario(`${servidorNome} avisou que não pode servir neste dia.`);
   }
 }
 
-export async function atualizarAtribuicaoManual(
+async function atualizarAtribuicaoManualInterno(
   ocorrenciaId: string,
   funcaoId: string,
   slotIndex: number,
@@ -322,6 +327,10 @@ export async function atualizarAtribuicaoManual(
   revalidatePath("/admin/calendario");
 }
 
+
+export async function atualizarAtribuicaoManual(...args: Parameters<typeof atualizarAtribuicaoManualInterno>) {
+  return comAvisos(() => atualizarAtribuicaoManualInterno(...args));
+}
 /**
  * Confere que a ocorrência é da paróquia e — para o PRESENCA, que só cuida
  * das missas do dia — que ela é de hoje.
@@ -339,10 +348,10 @@ async function garantirOcorrenciaParaPresenca(usuario: UsuarioAtual, ocorrenciaI
     .lte("data", fim.toISOString())
     .maybeSingle();
   if (error) throw error;
-  if (!data) throw new Error("Você só pode registrar presença nas missas de hoje.");
+  if (!data) throw new AvisoAoUsuario("Você só pode registrar presença nas missas de hoje.");
 }
 
-export async function registrarPresenca(
+async function registrarPresencaInterno(
   ocorrenciaId: string,
   funcaoId: string,
   slotIndex: number,
@@ -367,7 +376,11 @@ export async function registrarPresenca(
   revalidatePath("/admin/presenca");
 }
 
-export async function escalarTodosAtivos(ocorrenciaId: string) {
+
+export async function registrarPresenca(...args: Parameters<typeof registrarPresencaInterno>) {
+  return comAvisos(() => registrarPresencaInterno(...args));
+}
+async function escalarTodosAtivosInterno(ocorrenciaId: string) {
   const { paroquiaId, pastoralId } = await exigirPastoral();
   await garantirDaParoquia("MissaOcorrencia", ocorrenciaId, paroquiaId);
   const [{ data: servidores, error: servidoresError }, { data: existentes, error: existentesError }] =
@@ -414,7 +427,11 @@ export async function escalarTodosAtivos(ocorrenciaId: string) {
   revalidatePath(`/admin/calendario/${ocorrenciaId}`);
 }
 
-export async function adicionarNaListaTodosAtivos(ocorrenciaId: string, formData: FormData) {
+
+export async function escalarTodosAtivos(...args: Parameters<typeof escalarTodosAtivosInterno>) {
+  return comAvisos(() => escalarTodosAtivosInterno(...args));
+}
+async function adicionarNaListaTodosAtivosInterno(ocorrenciaId: string, formData: FormData) {
   const { paroquiaId, pastoralId } = await exigirPastoral();
   const servidorId = String(formData.get("servidorId") ?? "").trim();
   if (!servidorId) return;
@@ -456,7 +473,11 @@ export async function adicionarNaListaTodosAtivos(ocorrenciaId: string, formData
   revalidatePath(`/admin/calendario/${ocorrenciaId}`);
 }
 
-export async function removerDaListaTodosAtivos(ocorrenciaId: string, atribuicaoId: string) {
+
+export async function adicionarNaListaTodosAtivos(...args: Parameters<typeof adicionarNaListaTodosAtivosInterno>) {
+  return comAvisos(() => adicionarNaListaTodosAtivosInterno(...args));
+}
+async function removerDaListaTodosAtivosInterno(ocorrenciaId: string, atribuicaoId: string) {
   const { paroquiaId, pastoralId } = await exigirPastoral();
   await garantirDaParoquia("MissaOcorrencia", ocorrenciaId, paroquiaId);
   const { error } = await supabase
@@ -470,7 +491,11 @@ export async function removerDaListaTodosAtivos(ocorrenciaId: string, atribuicao
   revalidatePath(`/admin/calendario/${ocorrenciaId}`);
 }
 
-export async function registrarPresencaTodosAtivos(ocorrenciaId: string, atribuicaoId: string, formData: FormData) {
+
+export async function removerDaListaTodosAtivos(...args: Parameters<typeof removerDaListaTodosAtivosInterno>) {
+  return comAvisos(() => removerDaListaTodosAtivosInterno(...args));
+}
+async function registrarPresencaTodosAtivosInterno(ocorrenciaId: string, atribuicaoId: string, formData: FormData) {
   const { usuario, paroquiaId, pastoralId } = await exigirPastoralParaPresenca();
   await garantirOcorrenciaParaPresenca(usuario, ocorrenciaId, paroquiaId);
   const valor = String(formData.get("presente") ?? "");
@@ -489,7 +514,11 @@ export async function registrarPresencaTodosAtivos(ocorrenciaId: string, atribui
   revalidatePath("/admin/presenca");
 }
 
-export async function regenerarEscalaPeriodo(periodoInicioISO: string, periodoFimISO: string) {
+
+export async function registrarPresencaTodosAtivos(...args: Parameters<typeof registrarPresencaTodosAtivosInterno>) {
+  return comAvisos(() => registrarPresencaTodosAtivosInterno(...args));
+}
+async function regenerarEscalaPeriodoInterno(periodoInicioISO: string, periodoFimISO: string) {
   const { paroquiaId, pastoralId } = await exigirPastoral();
   const periodoInicio = new Date(periodoInicioISO);
   const periodoFim = new Date(periodoFimISO);
@@ -519,7 +548,11 @@ export async function regenerarEscalaPeriodo(periodoInicioISO: string, periodoFi
   await gerarEscalaPeriodo(periodoInicioISO, periodoFimISO);
 }
 
-export async function apagarEscalaPeriodo(periodoInicioISO: string, periodoFimISO: string) {
+
+export async function regenerarEscalaPeriodo(...args: Parameters<typeof regenerarEscalaPeriodoInterno>) {
+  return comAvisos(() => regenerarEscalaPeriodoInterno(...args));
+}
+async function apagarEscalaPeriodoInterno(periodoInicioISO: string, periodoFimISO: string) {
   const { paroquiaId, pastoralId } = await exigirPastoral();
   const periodoInicio = new Date(periodoInicioISO);
   const periodoFim = new Date(periodoFimISO);
@@ -546,16 +579,29 @@ export async function apagarEscalaPeriodo(periodoInicioISO: string, periodoFimIS
   revalidatePath("/admin/calendario");
 }
 
-export async function publicarEscalaMes(mes: string) {
+
+export async function apagarEscalaPeriodo(...args: Parameters<typeof apagarEscalaPeriodoInterno>) {
+  return comAvisos(() => apagarEscalaPeriodoInterno(...args));
+}
+async function publicarEscalaMesInterno(mes: string) {
   const { paroquiaId, pastoralId } = await exigirPastoral();
   await publicarMes(paroquiaId, pastoralId, mes);
   revalidatePath("/admin/calendario");
   revalidatePath("/[paroquia]/[pastoral]/escala", "page");
 }
 
-export async function despublicarEscalaMes(mes: string) {
+
+export async function publicarEscalaMes(...args: Parameters<typeof publicarEscalaMesInterno>) {
+  return comAvisos(() => publicarEscalaMesInterno(...args));
+}
+async function despublicarEscalaMesInterno(mes: string) {
   const { pastoralId } = await exigirPastoral();
   await despublicarMes(pastoralId, mes);
   revalidatePath("/admin/calendario");
   revalidatePath("/[paroquia]/[pastoral]/escala", "page");
+}
+
+
+export async function despublicarEscalaMes(...args: Parameters<typeof despublicarEscalaMesInterno>) {
+  return comAvisos(() => despublicarEscalaMesInterno(...args));
 }
