@@ -247,6 +247,9 @@ model Servidor {
   dataNascimento DateTime?
   /// URL pública do Storage (bucket "fotos-servidores") — ver lib/storage.ts.
   fotoUrl        String?
+  /// Telefones só com dígitos (DDD + número) — ver lib/telefone.ts.
+  celular            String?
+  celularResponsavel String?
   comunidade     String
   /// Grau do servidor. Determina quais funções ele pode exercer (o dele e os abaixo).
   categoria      Grau

@@ -4,6 +4,7 @@ import { useActionState } from "react";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { Input, Label, Select, FieldError } from "@/components/ui/Field";
 import { formatarDiaMissa } from "@/lib/occurrences";
+import { formatarTelefone } from "@/lib/telefone";
 import { useActionToast } from "@/components/hooks/useActionToast";
 import type { MissaOption, ServidorFormState } from "@/lib/types";
 
@@ -18,6 +19,8 @@ type ServidorFormProps = {
     categoria: string;
     missaIds: string[];
     experiente?: boolean;
+    celular?: string | null;
+    celularResponsavel?: string | null;
   };
   submitLabel: string;
   /** Pastoral com hierarquia (coroinhas). Sem ela (ex: ministros), o campo de grau some. */
@@ -71,6 +74,33 @@ export function ServidorForm({
             defaultValue={defaultValues?.dataNascimento}
             required
           />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+        <div>
+          <Label htmlFor="celular">Celular</Label>
+          <Input
+            id="celular"
+            name="celular"
+            type="tel"
+            inputMode="tel"
+            autoComplete="tel"
+            defaultValue={formatarTelefone(defaultValues?.celular)}
+            placeholder="(11) 98765-4321"
+          />
+        </div>
+        <div>
+          <Label htmlFor="celularResponsavel">Celular do responsável</Label>
+          <Input
+            id="celularResponsavel"
+            name="celularResponsavel"
+            type="tel"
+            inputMode="tel"
+            defaultValue={formatarTelefone(defaultValues?.celularResponsavel)}
+            placeholder="(11) 98765-4321"
+          />
+          <p className="mt-1.5 text-xs text-muted">Pai, mãe ou quem cuida — para menores de idade.</p>
         </div>
       </div>
 

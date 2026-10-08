@@ -104,6 +104,9 @@ export type ServidorRow = {
   /** Âncora de dia civil (ver lib/occurrences.ts); null = ainda não preenchida. */
   dataNascimento: string | null;
   fotoUrl: string | null;
+  /** Só dígitos (DDD + número) — ver lib/telefone.ts. */
+  celular: string | null;
+  celularResponsavel: string | null;
   comunidade: string;
   categoria: Grau;
   experiente: boolean;

@@ -1,4 +1,16 @@
 import { z } from "zod";
+import { normalizarTelefone, telefoneValido } from "@/lib/telefone";
+
+/** Telefone opcional: vira só dígitos; vazio vira null. */
+const telefoneOpcional = (rotulo: string) =>
+  z
+    .string()
+    .optional()
+    .refine((valor) => !valor?.trim() || /\d/.test(valor), { message: `${rotulo}: use só números` })
+    .transform((valor) => normalizarTelefone(valor))
+    .refine((digitos) => digitos === null || telefoneValido(digitos), {
+      message: `${rotulo}: informe DDD + número (ex: (11) 98765-4321)`,
+    });
 
 export const funcaoSchema = z.object({
   nome: z.string().trim().min(2, "Informe o nome da função"),
@@ -72,6 +84,8 @@ export const servidorSchema = z.object({
     message: "Selecione a categoria do servidor",
   }),
   missaIds: z.array(z.string().max(64)).min(1, "Selecione pelo menos uma missa").max(30),
+  celular: telefoneOpcional("Celular"),
+  celularResponsavel: telefoneOpcional("Celular do responsável"),
 });
 
 export const usuarioSchema = z.object({

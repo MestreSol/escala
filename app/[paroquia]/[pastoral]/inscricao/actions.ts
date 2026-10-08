@@ -30,6 +30,8 @@ export async function createServidor(
     // Pastoral sem graus (ex: ministros): todo mundo no mesmo nível.
     categoria: usaGraus(pastoral.tipo) ? formData.get("categoria") : GRAU_UNICO,
     missaIds: formData.getAll("missaIds"),
+    celular: formData.get("celular") ?? undefined,
+    celularResponsavel: formData.get("celularResponsavel") ?? undefined,
   });
 
   if (!parsed.success) {
