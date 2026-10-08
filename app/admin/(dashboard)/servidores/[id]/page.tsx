@@ -7,8 +7,13 @@ import { ServidorForm } from "@/components/ServidorForm";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { ActionForm } from "@/components/ui/ActionForm";
 import { getVinculosDoServidor } from "@/lib/servidorVinculo";
+import { listarIndisponibilidadesDoServidor } from "@/lib/servidorIndisponibilidade";
+import { agoraNaParoquia, lerDataArmazenada, paraExibicao } from "@/lib/occurrences";
+import { DeleteButton } from "@/components/admin/DeleteButton";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
 import type { ServidorMissaPreferenciaRow, ServidorRow } from "@/lib/types";
-import { updateServidor, saveServidorVinculos, atualizarFotoServidor } from "../actions";
+import { updateServidor, saveServidorVinculos, atualizarFotoServidor, liberarDiaIndisponivel } from "../actions";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +21,8 @@ export default async function EditarServidorPage({ params }: { params: Promise<{
   const { id } = await params;
   const { paroquia, pastoral } = await pastoralDoPainel();
 
-  const [servidorResult, missas, outrosServidoresResult, vinculadosIdsLista] = await Promise.all([
+  const hoje = new Date(`${agoraNaParoquia().slice(0, 10)}T00:00:00.000Z`);
+  const [servidorResult, missas, outrosServidoresResult, vinculadosIdsLista, diasIndisponiveis] = await Promise.all([
     supabase
       .from("Servidor")
       .select("*, preferenciasMissas:ServidorMissaPreferencia(*)")
@@ -34,6 +40,7 @@ export default async function EditarServidorPage({ params }: { params: Promise<{
       .order("nome", { ascending: true })
       .returns<{ id: string; nome: string }[]>(),
     getVinculosDoServidor(id),
+    listarIndisponibilidadesDoServidor(id, hoje),
   ]);
 
   if (servidorResult.error) throw servidorResult.error;
@@ -91,6 +98,35 @@ export default async function EditarServidorPage({ params }: { params: Promise<{
             <SubmitButton pendingLabel="Enviando">Salvar foto</SubmitButton>
           </div>
         </ActionForm>
+      </div>
+
+      <div>
+        <h2 className="mb-1 text-lg font-semibold text-fg">Dias em que avisou que não pode servir</h2>
+        <p className="mb-4 text-sm text-muted">
+          Marcados por <strong>{servidor.nome}</strong> na página de indisponibilidade. Nesses dias a escala não o
+          escala em nenhuma missa. Se a família confirmar que pode, libere o dia.
+        </p>
+
+        {diasIndisponiveis.length === 0 ? (
+          <p className="text-sm text-muted">Nenhum dia marcado daqui pra frente.</p>
+        ) : (
+          <ul className="divide-y divide-line/60 rounded-xl border border-line bg-surface">
+            {diasIndisponiveis.map((dia) => {
+              const rotulo = format(paraExibicao(lerDataArmazenada(dia.data)), "EEEE, dd/MM/yyyy", { locale: ptBR });
+              return (
+                <li key={dia.id} className="flex items-center justify-between gap-3 px-4 py-3 text-sm">
+                  <span className="font-medium capitalize text-fg">{rotulo}</span>
+                  <DeleteButton
+                    action={liberarDiaIndisponivel.bind(null, servidor.id, dia.id)}
+                    confirmMessage={`Liberar ${servidor.nome} para servir em ${rotulo}? Depois disso a escala pode escalá-lo nesse dia.`}
+                    label="Liberar dia"
+                    successMessage="Dia liberado."
+                  />
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </div>
 
       <div>

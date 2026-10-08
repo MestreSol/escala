@@ -63,3 +63,25 @@ export async function setIndisponibilidadeDoServidorNoPeriodo(
   const { error: insertError } = await supabase.from(TABELA).insert(linhas);
   if (insertError) throw insertError;
 }
+
+/** Dias que o servidor avisou como indisponível, de `desde` em diante — pro painel poder liberar. */
+export async function listarIndisponibilidadesDoServidor(
+  servidorId: string,
+  desde: Date
+): Promise<{ id: string; data: string }[]> {
+  const { data, error } = await supabase
+    .from(TABELA)
+    .select("id, data")
+    .eq("servidorId", servidorId)
+    .gte("data", desde.toISOString())
+    .order("data", { ascending: true })
+    .returns<{ id: string; data: string }[]>();
+  if (error) throw error;
+  return data ?? [];
+}
+
+/** Libera um dia avisado (ex: a família confirmou que a pessoa pode servir). */
+export async function removerIndisponibilidade(servidorId: string, indisponibilidadeId: string): Promise<void> {
+  const { error } = await supabase.from(TABELA).delete().eq("id", indisponibilidadeId).eq("servidorId", servidorId);
+  if (error) throw error;
+}

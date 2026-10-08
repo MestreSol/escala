@@ -1,5 +1,6 @@
 "use server";
 
+import { removerIndisponibilidade } from "@/lib/servidorIndisponibilidade";
 import { AvisoAoUsuario, comAvisos, comAvisosNoFormulario } from "@/lib/avisos";
 import { exigirPastoral } from "@/lib/sessao";
 import { garantirDaParoquia, garantirDaPastoral } from "@/lib/paroquia";
@@ -145,4 +146,16 @@ async function alternarExperienteInterno(servidorId: string) {
 
 export async function alternarExperiente(...args: Parameters<typeof alternarExperienteInterno>) {
   return comAvisos(() => alternarExperienteInterno(...args));
+}
+
+async function liberarDiaIndisponivelInterno(servidorId: string, indisponibilidadeId: string) {
+  const { pastoral } = await exigirPastoral();
+  await garantirDaPastoral("Servidor", servidorId, pastoral.id);
+  await removerIndisponibilidade(servidorId, indisponibilidadeId);
+
+  revalidatePath(`/admin/servidores/${servidorId}`);
+}
+
+export async function liberarDiaIndisponivel(...args: Parameters<typeof liberarDiaIndisponivelInterno>) {
+  return comAvisos(() => liberarDiaIndisponivelInterno(...args));
 }
