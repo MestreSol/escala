@@ -8,6 +8,7 @@ import {
   podeGerenciarUsuarios,
 } from "@/lib/sessao";
 import { NavLink } from "@/components/admin/NavLink";
+import { usaGraus } from "@/lib/constants";
 import { logout } from "../login/actions";
 
 const NAV_ITEMS = [
@@ -31,6 +32,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
       ? [PRESENCA_ITEM]
       : [
           ...NAV_ITEMS,
+          ...(pastoral && usaGraus(pastoral.tipo) ? [{ href: "/admin/proximos-acolitos", label: "Próximos acólitos" }] : []),
           PRESENCA_ITEM,
           ...(podeGerenciarUsuarios(usuarioLogado) ? [{ href: "/admin/usuarios", label: "Usuários" }] : []),
           ...(cuidaDaParoquiaToda(usuarioLogado) && paroquia ? [{ href: "/admin/pastorais", label: "Pastorais" }] : []),
