@@ -23,7 +23,9 @@ export type DataTableLinha = {
 
 type Direcao = "asc" | "desc";
 
-const OPCOES_POR_PAGINA = [10, 20, 50, 0] as const; // 0 = todos
+// Começa no mínimo e nunca passa de 50: renderizar a lista inteira de uma vez
+// deixava as tabelas grandes lentas.
+const OPCOES_POR_PAGINA = [10, 20, 50] as const;
 
 /**
  * Tabela com ordenação e paginação no navegador. As linhas chegam prontas do
@@ -35,7 +37,7 @@ export function DataTable({
   colunas,
   linhas,
   ordemPadrao,
-  porPaginaPadrao = 20,
+  porPaginaPadrao = OPCOES_POR_PAGINA[0],
   rodape,
   vazio = "Nada por aqui ainda.",
 }: {
@@ -75,10 +77,10 @@ export function DataTable({
   }, [linhas, ordem, direcao]);
 
   const total = ordenadas.length;
-  const totalPaginas = porPagina === 0 ? 1 : Math.max(1, Math.ceil(total / porPagina));
+  const totalPaginas = Math.max(1, Math.ceil(total / porPagina));
   const pagina = Math.min(Math.max(1, Number(searchParams.get("pagina")) || 1), totalPaginas);
-  const inicio = porPagina === 0 ? 0 : (pagina - 1) * porPagina;
-  const visiveis = porPagina === 0 ? ordenadas : ordenadas.slice(inicio, inicio + porPagina);
+  const inicio = (pagina - 1) * porPagina;
+  const visiveis = ordenadas.slice(inicio, inicio + porPagina);
 
   function atualizarUrl(mudancas: Record<string, string | null>) {
     const params = new URLSearchParams(searchParams.toString());
@@ -169,13 +171,11 @@ export function DataTable({
         </table>
       </div>
 
-      {total > Math.min(...OPCOES_POR_PAGINA.filter((n) => n > 0)) ? (
+      {total > OPCOES_POR_PAGINA[0] ? (
         <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs text-muted">
           <div className="flex items-center gap-3">
             <span className="tabular-nums">
-              {porPagina === 0
-                ? `${total} itens`
-                : `Mostrando ${inicio + 1}–${Math.min(inicio + porPagina, total)} de ${total}`}
+              {`Mostrando ${inicio + 1}–${Math.min(inicio + porPagina, total)} de ${total}`}
             </span>
             <label className="flex items-center gap-1.5">
               <span className="text-subtle">Por página</span>
@@ -186,7 +186,7 @@ export function DataTable({
               >
                 {OPCOES_POR_PAGINA.map((opcao) => (
                   <option key={opcao} value={opcao}>
-                    {opcao === 0 ? "Todos" : opcao}
+                    {opcao}
                   </option>
                 ))}
               </select>
