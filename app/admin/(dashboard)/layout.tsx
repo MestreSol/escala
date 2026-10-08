@@ -18,6 +18,7 @@ const NAV_ITEMS = [
   { href: "/admin/servidores", label: "Servidores" },
   { href: "/admin/calendario", label: "Calendário" },
   { href: "/admin/acompanhamento", label: "Acompanhamento" },
+  { href: "/admin/absenteismo", label: "Absenteísmo" },
   { href: "/admin/aniversariantes", label: "Aniversariantes" },
 ];
 const PRESENCA_ITEM = { href: "/admin/presenca", label: "Presença do dia" };

@@ -4,8 +4,8 @@ import { pastoralDoPainel } from "@/lib/sessao";
 import { usaGraus } from "@/lib/constants";
 import { agoraNaParoquia, lerDataArmazenada } from "@/lib/occurrences";
 import { calcularIdade } from "@/lib/idade";
-import { formatarTelefone, linkWhatsApp } from "@/lib/telefone";
 import { DataTable } from "@/components/ui/DataTable";
+import { TelefoneLink } from "@/components/admin/TelefoneLink";
 
 export const dynamic = "force-dynamic";
 
@@ -21,21 +21,6 @@ type Coroinha = {
 };
 
 const p2 = (n: number) => String(n).padStart(2, "0");
-
-function Telefone({ digitos }: { digitos: string | null }) {
-  if (!digitos) return <span className="text-subtle">—</span>;
-  return (
-    <a
-      href={linkWhatsApp(digitos)}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="whitespace-nowrap tabular-nums text-muted transition-colors hover:text-accent"
-      title="Abrir no WhatsApp"
-    >
-      {formatarTelefone(digitos)}
-    </a>
-  );
-}
 
 export default async function ProximosAcolitosPage({ searchParams }: { searchParams: Promise<{ ano?: string }> }) {
   const { ano: anoParam } = await searchParams;
@@ -120,8 +105,8 @@ export default async function ProximosAcolitosPage({ searchParams }: { searchPar
               nome: <span className="font-medium text-fg">{c.nome}</span>,
               aniversario: <span className="tabular-nums text-muted">{aniversario}</span>,
               idade: <span className="tabular-nums text-muted">{idade}</span>,
-              celular: <Telefone digitos={c.celular} />,
-              responsavel: <Telefone digitos={c.celularResponsavel} />,
+              celular: <TelefoneLink digitos={c.celular} />,
+              responsavel: <TelefoneLink digitos={c.celularResponsavel} />,
               acoes: (
                 <Link href={`/admin/servidores/${c.id}`} className="font-medium text-accent hover:text-accent-hover">
                   Editar

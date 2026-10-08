@@ -40,6 +40,7 @@ export function DataTable({
   porPaginaPadrao = OPCOES_POR_PAGINA[0],
   rodape,
   vazio = "Nada por aqui ainda.",
+  prefixo = "",
 }: {
   colunas: DataTableColuna[];
   linhas: DataTableLinha[];
@@ -48,17 +49,19 @@ export function DataTable({
   /** Linha(s) de <tfoot>, fora da paginação (ex: totais gerais). */
   rodape?: ReactNode;
   vazio?: string;
+  /** Prefixo dos parâmetros na URL, pra duas tabelas na mesma página não dividirem a ordem/página. */
+  prefixo?: string;
 }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
   const chavesOrdenaveis = new Set([ordemPadrao.chave, ...colunas.filter((c) => c.ordenavel).map((c) => c.chave)]);
-  const ordemParam = searchParams.get("ordem");
+  const ordemParam = searchParams.get(`${prefixo}ordem`);
   const ordem = ordemParam && chavesOrdenaveis.has(ordemParam) ? ordemParam : ordemPadrao.chave;
-  const dirParam = searchParams.get("dir");
+  const dirParam = searchParams.get(`${prefixo}dir`);
   const direcao: Direcao =
     dirParam === "asc" || dirParam === "desc" ? dirParam : ordem === ordemPadrao.chave ? ordemPadrao.direcao : "asc";
-  const porPaginaParam = Number(searchParams.get("porPagina"));
+  const porPaginaParam = Number(searchParams.get(`${prefixo}porPagina`));
   const porPagina = OPCOES_POR_PAGINA.includes(porPaginaParam as (typeof OPCOES_POR_PAGINA)[number])
     ? porPaginaParam
     : porPaginaPadrao;
@@ -78,15 +81,15 @@ export function DataTable({
 
   const total = ordenadas.length;
   const totalPaginas = Math.max(1, Math.ceil(total / porPagina));
-  const pagina = Math.min(Math.max(1, Number(searchParams.get("pagina")) || 1), totalPaginas);
+  const pagina = Math.min(Math.max(1, Number(searchParams.get(`${prefixo}pagina`)) || 1), totalPaginas);
   const inicio = (pagina - 1) * porPagina;
   const visiveis = ordenadas.slice(inicio, inicio + porPagina);
 
   function atualizarUrl(mudancas: Record<string, string | null>) {
     const params = new URLSearchParams(searchParams.toString());
     for (const [chave, valor] of Object.entries(mudancas)) {
-      if (valor === null) params.delete(chave);
-      else params.set(chave, valor);
+      if (valor === null) params.delete(`${prefixo}${chave}`);
+      else params.set(`${prefixo}${chave}`, valor);
     }
     const query = params.toString();
     window.history.replaceState(null, "", query ? `${pathname}?${query}` : pathname);
