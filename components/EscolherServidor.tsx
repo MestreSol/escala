@@ -11,12 +11,14 @@ export function EscolherServidor({
   servidorId,
   mes,
   caminho,
+  placeholder = "Digite seu nome...",
 }: {
   servidores: { id: string; nome: string }[];
   servidorId: string | null;
   mes: string;
   /** Página de indisponibilidade da paróquia (ex: "/matriz/indisponibilidade"). */
   caminho: string;
+  placeholder?: string;
 }) {
   const router = useRouter();
   const [carregando, startTransition] = useTransition();
@@ -26,7 +28,7 @@ export function EscolherServidor({
       <SearchableSelect
         name="servidorId"
         defaultValue={servidorId ?? ""}
-        placeholder="Digite seu nome..."
+        placeholder={placeholder}
         options={servidores.map((servidor) => ({ value: servidor.id, label: servidor.nome }))}
         onValueChange={(valor) => {
           if (!valor || valor === servidorId) return;

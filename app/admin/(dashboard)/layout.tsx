@@ -16,6 +16,7 @@ const NAV_ITEMS = [
   { href: "/admin/funcoes", label: "Funções" },
   { href: "/admin/missas", label: "Missas" },
   { href: "/admin/servidores", label: "Servidores" },
+  { href: "/admin/disponibilidade", label: "Disponibilidade" },
   { href: "/admin/calendario", label: "Calendário" },
   { href: "/admin/acompanhamento", label: "Acompanhamento" },
   { href: "/admin/absenteismo", label: "Absenteísmo" },

@@ -18,6 +18,11 @@ export type DiaCalendario = {
 
 const DIAS_DA_SEMANA = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 
+const TEXTOS = {
+  servidor: { marcado: "Não vou poder", curto: "Não vou", dica: "Toque nos dias em que você não pode servir." },
+  admin: { marcado: "Não pode servir", curto: "Não pode", dica: "Clique nos dias em que a pessoa não pode servir." },
+};
+
 /**
  * Calendário do mês pra marcar os dias em que a pessoa NÃO pode servir. Só
  * dias com missa são clicáveis; dias que já passaram ficam travados (mas o
@@ -28,13 +33,17 @@ export function CalendarioIndisponibilidade({
   dias,
   primeiroDiaDaSemana,
   hoje,
+  paraAdmin = false,
 }: {
   dias: DiaCalendario[];
   /** 0 = o dia 1 cai num domingo ... 6 = sábado. */
   primeiroDiaDaSemana: number;
   /** "yyyy-MM-dd" no fuso da paróquia. */
   hoje: string;
+  /** Textos em terceira pessoa, pro painel (ver /admin/disponibilidade). */
+  paraAdmin?: boolean;
 }) {
+  const textos = paraAdmin ? TEXTOS.admin : TEXTOS.servidor;
   const [marcados, setMarcados] = useState(
     () => new Set(dias.filter((d) => d.marcadoInicialmente).map((d) => d.valor))
   );
@@ -88,7 +97,7 @@ export function CalendarioIndisponibilidade({
           return (
             <label
               key={dia.chave}
-              title={`${marcado ? "Não vou poder" : "Disponível"} — missa às ${dia.horarios.join(" e ")}`}
+              title={`${marcado ? textos.marcado : "Disponível"} — missa às ${dia.horarios.join(" e ")}`}
               className={clsx(
                 "relative flex aspect-square select-none flex-col items-center justify-start gap-0.5 rounded-lg border pt-1.5 text-xs transition-all duration-150 sm:pt-2 sm:text-sm",
                 passado
@@ -120,7 +129,7 @@ export function CalendarioIndisponibilidade({
               </span>
               {marcado ? (
                 <span className="text-[10px] font-semibold uppercase leading-none tracking-wide sm:text-[11px]">
-                  Não vou
+                  {textos.curto}
                 </span>
               ) : (
                 <>
@@ -147,7 +156,7 @@ export function CalendarioIndisponibilidade({
           <span className="size-2.5 rounded-sm border border-line bg-surface-2" /> Tem missa
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="size-2.5 rounded-sm border border-danger/50 bg-danger-soft" /> Não vou poder
+          <span className="size-2.5 rounded-sm border border-danger/50 bg-danger-soft" /> {textos.marcado}
         </span>
         <span className="flex items-center gap-1.5">
           <span className="size-2.5 rounded-sm bg-surface-2/40" /> Sem missa
@@ -159,7 +168,7 @@ export function CalendarioIndisponibilidade({
           {selecionaveis.length === 0
             ? "Nenhuma missa pela frente neste mês."
             : marcadosFuturos === 0
-              ? "Toque nos dias em que você não pode servir."
+              ? textos.dica
               : `${marcadosFuturos} dia${marcadosFuturos > 1 ? "s" : ""} marcado${marcadosFuturos > 1 ? "s" : ""}`}
         </p>
         <div className="flex shrink-0 items-center gap-2">
