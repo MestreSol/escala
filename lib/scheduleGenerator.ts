@@ -281,7 +281,9 @@ function montarUnidades(slots: SlotParaPreencher[], funcoesAtomicas: Set<string>
  * ocorrência se TODOS os vinculados também puderem servir ali (preferem
  * aquela missa, ninguém do grupo já está escalado em outra missa do dia, e há
  * vaga não-atômica distinta e elegível para cada um); senão, nenhum do grupo
- * é escalado naquela ocorrência.
+ * é escalado naquela ocorrência. O grupo entra no rodízio como todo mundo
+ * (ver `grupoNaVez`), e cada um vai pra uma função diferente sempre que dá,
+ * evitando repetir a função da última vez (ver `alocarGrupo`).
  *
  * Vagas normais sem candidato distinto disponível tentam, como último
  * recurso, ser cobertas por quem já está escalado na mesma ocorrência numa
@@ -306,6 +308,60 @@ function montarUnidades(slots: SlotParaPreencher[], funcoesAtomicas: Set<string>
  * excluem o servidor de qualquer vaga naquele dia, sem exceção — diferente
  * de frequenciaBaixa, aqui não há "último recurso".
  */
+/** Limite de combinações testadas por grupo (grupos são pequenos: irmãos, 2 ou 3). */
+const MAXIMO_COMBINACOES_GRUPO = 20000;
+
+/**
+ * Escolhe uma vaga distinta pra cada membro do grupo vinculado. Servir junto
+ * não é servir na mesma função: o melhor é cada um numa função diferente e
+ * nenhum repetindo a função da última vez. Entre as opções igualmente boas,
+ * sorteia (pra não cair sempre nas mesmas funções).
+ */
+function alocarGrupo(
+  membros: ServidorCandidato[],
+  vagas: SlotParaPreencher[],
+  ultimaFuncao: Map<string, string>,
+  random: () => number
+): Map<string, SlotParaPreencher> | null {
+  const sorteio = new Map(vagas.map((v) => [v, random()]));
+  let melhor: { custo: number; alocacao: SlotParaPreencher[] } | null = null;
+  let combinacoes = 0;
+  const escolhidas: SlotParaPreencher[] = [];
+
+  function custoDe(alocacao: SlotParaPreencher[]): number {
+    let custo = 0;
+    const funcoes = new Set<string>();
+    alocacao.forEach((vaga, i) => {
+      if (funcoes.has(vaga.funcaoId)) custo += 1000;
+      funcoes.add(vaga.funcaoId);
+      if (ultimaFuncao.get(membros[i].id) === vaga.funcaoId) custo += 100;
+      custo += sorteio.get(vaga) ?? 0;
+    });
+    return custo;
+  }
+
+  function buscar(i: number) {
+    if (combinacoes >= MAXIMO_COMBINACOES_GRUPO) return;
+    if (i === membros.length) {
+      combinacoes += 1;
+      const custo = custoDe(escolhidas);
+      if (!melhor || custo < melhor.custo) melhor = { custo, alocacao: [...escolhidas] };
+      return;
+    }
+    for (const vaga of vagas) {
+      if (escolhidas.includes(vaga) || !grauCompativel(membros[i], vaga.grauMinimo)) continue;
+      escolhidas.push(vaga);
+      buscar(i + 1);
+      escolhidas.pop();
+    }
+  }
+
+  buscar(0);
+  const resultado = melhor as { custo: number; alocacao: SlotParaPreencher[] } | null;
+  if (!resultado) return null;
+  return new Map(membros.map((m, i) => [m.id, resultado.alocacao[i]]));
+}
+
 export function gerarEscala(
   slotsInput: SlotParaPreencher[],
   servidores: ServidorCandidato[],
@@ -411,6 +467,32 @@ export function gerarEscala(
       return preferidos.length > 0 ? preferidos : candidatos;
     }
 
+    /**
+     * Rodízio do grupo vinculado: o pré-passo roda antes das outras vagas, e
+     * sem isso o grupo entrava em TODA missa que preferisse. Só entra quando
+     * não há gente que serviu menos que ele em número suficiente pra ocupar
+     * as vagas que sobram — o mesmo critério de "menor contagem" do resto.
+     */
+    function grupoNaVez(membros: ServidorCandidato[], slot: SlotParaPreencher): boolean {
+      const contagemDoGrupo = Math.max(...membros.map((m) => contagemTotal.get(m.id) ?? 0));
+      const vagasRestantes = unidades.reduce((soma, u) => soma + u.slots.length, 0);
+      const idsDoGrupo = new Set(membros.map((m) => m.id));
+      const outros = servidores.filter(
+        (s) =>
+          !idsDoGrupo.has(s.id) &&
+          elegivelParaMissa(s, slot) &&
+          !usadosNaOcorrencia.has(s.id) &&
+          !usadosNoDia.get(diaChave(slot.data))?.has(s.id) &&
+          disponivelNoDia(s, slot.data)
+      );
+      // Sem gente suficiente pras vagas, o grupo entra (senão sobra vaga vazia).
+      if (outros.length < vagasRestantes) return true;
+      const serviramMenos = outros.filter(
+        (s) => !s.frequenciaBaixa && (contagemTotal.get(s.id) ?? 0) < contagemDoGrupo
+      ).length;
+      return serviramMenos <= vagasRestantes - membros.length;
+    }
+
     // Pré-passo de vínculos (ex: irmãos): ou o grupo inteiro é escalado
     // junto nesta ocorrência (em vagas não-atômicas distintas), ou nenhum
     // dos vinculados serve aqui. Só considera grupos totalmente livres nesta
@@ -452,25 +534,19 @@ export function gerarEscala(
           continue;
         }
 
-        const poolSlots = unidades
-          .filter((u) => !u.atomica)
-          .flatMap((u) => u.slots)
-          .sort((a, b) => PRIORIDADE_ORDEM[a.prioridade] - PRIORIDADE_ORDEM[b.prioridade]);
-
-        const vagasReservadas = new Set<string>();
-        const alocacao = new Map<string, SlotParaPreencher>();
-
-        for (const membro of membros) {
-          const slot = poolSlots.find((s) => {
-            const chave = `${s.funcaoId}:${s.slotIndex}`;
-            return !vagasReservadas.has(chave) && grauCompativel(membro, s.grauMinimo);
-          });
-          if (!slot) break;
-          vagasReservadas.add(`${slot.funcaoId}:${slot.slotIndex}`);
-          alocacao.set(membro.id, slot);
+        if (!grupoNaVez(membros, slotsDaOcorrenciaBrutos[0])) {
+          for (const m of membros) usadosNaOcorrencia.add(m.id);
+          continue;
         }
 
-        if (alocacao.size !== membros.length) {
+        const alocacao = alocarGrupo(
+          membros,
+          unidades.filter((u) => !u.atomica).flatMap((u) => u.slots),
+          ultimaFuncao,
+          random
+        );
+
+        if (!alocacao) {
           for (const m of membros) usadosNaOcorrencia.add(m.id);
           continue;
         }
