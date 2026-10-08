@@ -9,7 +9,7 @@ import { lerDataArmazenada } from "@/lib/occurrences";
 import { calcularIdade } from "@/lib/idade";
 import type { ServidorMissaPreferenciaRow, ServidorRow } from "@/lib/types";
 import { ActionForm } from "@/components/ui/ActionForm";
-import { alternarExperiente, deleteServidor } from "./actions";
+import { alternarExperiente, definirAtivo, deleteServidor } from "./actions";
 
 const GRAU_COLOR: Record<string, "green" | "blue" | "yellow"> = {
   COROINHA: "green",
@@ -22,9 +22,10 @@ export const dynamic = "force-dynamic";
 export default async function ServidoresPage({
   searchParams,
 }: {
-  searchParams: Promise<{ comunidade?: string; categoria?: string }>;
+  searchParams: Promise<{ comunidade?: string; categoria?: string; situacao?: string }>;
 }) {
-  const { comunidade, categoria } = await searchParams;
+  const { comunidade, categoria, situacao } = await searchParams;
+  const verInativos = situacao === "inativos";
   const { pastoral } = await pastoralDoPainel();
   const comGraus = usaGraus(pastoral.tipo);
 
@@ -32,7 +33,7 @@ export default async function ServidoresPage({
     .from("Servidor")
     .select("*, preferenciasMissas:ServidorMissaPreferencia(*)")
     .eq("pastoralId", pastoral.id)
-    .eq("ativo", true);
+    .eq("ativo", !verInativos);
 
   if (comunidade) query = query.ilike("comunidade", `%${comunidade}%`);
   if (categoria && comGraus) query = query.eq("categoria", categoria);
@@ -48,7 +49,7 @@ export default async function ServidoresPage({
       <div className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight text-fg">Servidores</h1>
         <p className="text-sm text-muted">
-          {pastoral.nome} · {servidores.length} cadastrado(s)
+          {pastoral.nome} · {servidores.length} {verInativos ? "inativo(s)" : "ativo(s)"}
         </p>
       </div>
 
@@ -74,6 +75,17 @@ export default async function ServidoresPage({
             <option value="COROINHA">Coroinha</option>
             <option value="ACOLITO">Acólito</option>
             <option value="CERIMONIARIO">Cerimoniário</option>
+          </select>
+        </div>
+        <div>
+          <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-muted">Situação</label>
+          <select
+            name="situacao"
+            defaultValue={verInativos ? "inativos" : ""}
+            className="rounded-md border border-line bg-surface px-3 py-1.5 text-sm text-fg focus:border-accent focus:outline-none"
+          >
+            <option value="">Ativos</option>
+            <option value="inativos">Inativos</option>
           </select>
         </div>
         <button
@@ -157,6 +169,20 @@ export default async function ServidoresPage({
                 <Link href={`/admin/servidores/${servidor.id}`} className="font-medium text-accent hover:text-accent-hover">
                   Editar
                 </Link>
+                {servidor.ativo ? (
+                  <DeleteButton
+                    action={definirAtivo.bind(null, servidor.id, false)}
+                    confirmMessage={`Desativar "${servidor.nome}"? Ele sai do sorteio da escala e das listas públicas. O cadastro e o histórico continuam guardados, e dá pra reativar depois em "Situação: Inativos".`}
+                    label="Desativar"
+                    successMessage="Servidor desativado."
+                  />
+                ) : (
+                  <ActionForm action={definirAtivo.bind(null, servidor.id, true)} successMessage="Servidor reativado.">
+                    <button type="submit" className="text-sm font-medium text-ok/90 transition-colors hover:text-ok">
+                      Reativar
+                    </button>
+                  </ActionForm>
+                )}
                 <DeleteButton
                   action={deleteServidor.bind(null, servidor.id)}
                   confirmMessage={`Excluir o servidor "${servidor.nome}"?`}

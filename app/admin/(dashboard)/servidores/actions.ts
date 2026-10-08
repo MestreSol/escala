@@ -28,6 +28,8 @@ async function updateServidorInterno(
     // Pastoral sem graus (ex: ministros): todo mundo no mesmo nível.
     categoria: usaGraus(pastoral.tipo) ? formData.get("categoria") : GRAU_UNICO,
     missaIds: formData.getAll("missaIds"),
+    celular: formData.get("celular") ?? undefined,
+    celularResponsavel: formData.get("celularResponsavel") ?? undefined,
   });
 
   if (!parsed.success) {
@@ -158,4 +160,23 @@ async function liberarDiaIndisponivelInterno(servidorId: string, indisponibilida
 
 export async function liberarDiaIndisponivel(...args: Parameters<typeof liberarDiaIndisponivelInterno>) {
   return comAvisos(() => liberarDiaIndisponivelInterno(...args));
+}
+
+async function definirAtivoInterno(servidorId: string, ativo: boolean) {
+  const { pastoral } = await exigirPastoral();
+  await garantirDaPastoral("Servidor", servidorId, pastoral.id);
+  const { error } = await supabase
+    .from("Servidor")
+    .update({ ativo, updatedAt: nowIso() })
+    .eq("id", servidorId)
+    .eq("pastoralId", pastoral.id);
+  if (error) throw error;
+
+  revalidatePath("/admin/servidores");
+  revalidatePath(`/admin/servidores/${servidorId}`);
+}
+
+/** Desativado sai do sorteio e das listas públicas; histórico e cadastro ficam. */
+export async function definirAtivo(...args: Parameters<typeof definirAtivoInterno>) {
+  return comAvisos(() => definirAtivoInterno(...args));
 }
