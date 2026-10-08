@@ -3,16 +3,19 @@ import { ptBR } from "date-fns/locale";
 import { supabase } from "@/lib/supabase";
 import { obterUsuarioAtual, pastoralDaPresenca } from "@/lib/sessao";
 import { PresencaSelect } from "@/components/admin/PresencaSelect";
+import { EditarContatoModal } from "@/components/admin/EditarContatoModal";
+import { formatarTelefone } from "@/lib/telefone";
 import { intervaloDeHojeNaParoquia, lerDataArmazenada, paraExibicao } from "@/lib/occurrences";
 import type { EscalaAtribuicaoRow, FuncaoRow, MissaOcorrenciaRow, MissaRow, ServidorRow } from "@/lib/types";
 import { registrarPresencaTodosAtivos } from "../calendario/actions";
+import { salvarContatos, salvarFoto } from "../contatos/actions";
 
 export const dynamic = "force-dynamic";
 
 type OcorrenciaDoDia = MissaOcorrenciaRow & {
   missa: Pick<MissaRow, "horario" | "comunidade">;
   atribuicoes: (EscalaAtribuicaoRow & {
-    servidor: Pick<ServidorRow, "nome"> | null;
+    servidor: Pick<ServidorRow, "nome" | "fotoUrl" | "celular" | "celularResponsavel"> | null;
     funcao: Pick<FuncaoRow, "nome"> | null;
   })[];
 };
@@ -25,7 +28,7 @@ export default async function PresencaDoDiaPage() {
 
   const { data, error } = await supabase
     .from("MissaOcorrencia")
-    .select("*, missa:Missa(horario, comunidade), atribuicoes:EscalaAtribuicao(*, servidor:Servidor(nome), funcao:Funcao(nome))")
+    .select("*, missa:Missa(horario, comunidade), atribuicoes:EscalaAtribuicao(*, servidor:Servidor(nome, fotoUrl, celular, celularResponsavel), funcao:Funcao(nome))")
     .eq("paroquiaId", paroquia.id)
     .gte("data", inicio.toISOString())
     .lte("data", fim.toISOString())
@@ -74,11 +77,36 @@ export default async function PresencaDoDiaPage() {
                   const salvarPresenca = registrarPresencaTodosAtivos.bind(null, ocorrencia.id, atribuicao.id);
                   return (
                     <li key={atribuicao.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium text-fg">
-                          {atribuicao.servidorNomeSnapshot ?? atribuicao.servidor?.nome ?? "—"}
-                        </p>
-                        {atribuicao.funcao ? <p className="text-xs text-muted">{atribuicao.funcao.nome}</p> : null}
+                      <div className="flex min-w-0 items-center gap-3">
+                        {atribuicao.servidor?.fotoUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={atribuicao.servidor.fotoUrl} alt="" className="size-9 shrink-0 rounded-full object-cover" />
+                        ) : (
+                          <span
+                            aria-hidden
+                            className="flex size-9 shrink-0 items-center justify-center rounded-full bg-surface-2 text-xs text-muted"
+                          >
+                            {(atribuicao.servidorNomeSnapshot ?? atribuicao.servidor?.nome ?? "?").charAt(0)}
+                          </span>
+                        )}
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-fg">
+                            {atribuicao.servidorNomeSnapshot ?? atribuicao.servidor?.nome ?? "—"}
+                          </p>
+                          <div className="flex items-center gap-2 text-xs text-muted">
+                            {atribuicao.funcao ? <span>{atribuicao.funcao.nome}</span> : null}
+                            {atribuicao.servidor && atribuicao.servidorId ? (
+                              <EditarContatoModal
+                                nome={atribuicao.servidor.nome}
+                                fotoUrl={atribuicao.servidor.fotoUrl}
+                                celular={formatarTelefone(atribuicao.servidor.celular)}
+                                celularResponsavel={formatarTelefone(atribuicao.servidor.celularResponsavel)}
+                                salvarContatos={salvarContatos.bind(null, atribuicao.servidorId)}
+                                salvarFoto={salvarFoto.bind(null, atribuicao.servidorId)}
+                              />
+                            ) : null}
+                          </div>
+                        </div>
                       </div>
                       <PresencaSelect action={salvarPresenca} defaultValue={atribuicao.presente} podeCorrigir={podeCorrigir} />
                     </li>

@@ -16,6 +16,7 @@ function revalidar(servidorId: string) {
   revalidatePath(`/admin/contatos/${servidorId}`);
   revalidatePath("/admin/servidores");
   revalidatePath(`/admin/servidores/${servidorId}`);
+  revalidatePath("/admin/presenca");
 }
 
 async function salvarContatosInterno(servidorId: string, formData: FormData) {
