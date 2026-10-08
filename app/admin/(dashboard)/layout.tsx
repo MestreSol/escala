@@ -23,15 +23,16 @@ const NAV_ITEMS = [
   { href: "/admin/aniversariantes", label: "Aniversariantes" },
 ];
 const PRESENCA_ITEM = { href: "/admin/presenca", label: "Presença do dia" };
+const CONTATOS_ITEM = { href: "/admin/contatos", label: "Fotos e telefones" };
 
 export default async function AdminLayout({ children }: { children: ReactNode }) {
   const usuarioLogado = await obterUsuarioAtual();
   if (!usuarioLogado) redirect("/admin/login");
   const [paroquia, pastoral] = await Promise.all([obterParoquiaAtual(), obterPastoralAtual()]);
-  // PRESENCA só registra a presença nas missas do dia — nada mais do painel.
+  // PRESENCA registra a presença nas missas do dia e edita foto/telefones — nada mais do painel.
   const navItems =
     usuarioLogado.papel === "PRESENCA"
-      ? [PRESENCA_ITEM]
+      ? [PRESENCA_ITEM, CONTATOS_ITEM]
       : [
           ...NAV_ITEMS,
           ...(pastoral && usaGraus(pastoral.tipo) ? [{ href: "/admin/proximos-acolitos", label: "Próximos acólitos" }] : []),

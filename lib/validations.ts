@@ -88,6 +88,12 @@ export const servidorSchema = z.object({
   celularResponsavel: telefoneOpcional("Celular do responsável"),
 });
 
+/** Só os contatos — o que o usuário PRESENCA pode editar (ver /admin/contatos). */
+export const contatoSchema = z.object({
+  celular: telefoneOpcional("Celular"),
+  celularResponsavel: telefoneOpcional("Celular do responsável"),
+});
+
 export const usuarioSchema = z.object({
   username: z
     .string()

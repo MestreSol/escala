@@ -3,7 +3,7 @@ import { SESSION_COOKIE_NAME, verificarSessionToken } from "@/lib/auth";
 
 /**
  * Protege as PÁGINAS do painel (/admin/*): sem sessão válida, manda pro login;
- * o PRESENCA só entra em /admin/presenca (inclui as rotas de imagem/PDF da escala).
+ * o PRESENCA só entra em /admin/presenca e em /admin/contatos (foto e telefones).
  * Não protege Server Actions — cada action confere o usuário de novo (ver
  * exigirUsuario em lib/sessao.ts).
  */
@@ -23,7 +23,9 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  if (session.papel === "PRESENCA" && pathname !== "/admin/presenca") {
+  const liberadoParaPresenca =
+    pathname === "/admin/presenca" || pathname === "/admin/contatos" || pathname.startsWith("/admin/contatos/");
+  if (session.papel === "PRESENCA" && !liberadoParaPresenca) {
     return NextResponse.redirect(new URL("/admin/presenca", request.url));
   }
 
