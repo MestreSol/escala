@@ -22,9 +22,9 @@ export const dynamic = "force-dynamic";
 export default async function ServidoresPage({
   searchParams,
 }: {
-  searchParams: Promise<{ comunidade?: string; categoria?: string; situacao?: string }>;
+  searchParams: Promise<{ nome?: string; comunidade?: string; categoria?: string; situacao?: string }>;
 }) {
-  const { comunidade, categoria, situacao } = await searchParams;
+  const { nome, comunidade, categoria, situacao } = await searchParams;
   const verInativos = situacao === "inativos";
   const { pastoral } = await pastoralDoPainel();
   const comGraus = usaGraus(pastoral.tipo);
@@ -35,6 +35,7 @@ export default async function ServidoresPage({
     .eq("pastoralId", pastoral.id)
     .eq("ativo", !verInativos);
 
+  if (nome?.trim()) query = query.ilike("nome", `%${nome.trim()}%`);
   if (comunidade) query = query.ilike("comunidade", `%${comunidade}%`);
   if (categoria && comGraus) query = query.eq("categoria", categoria);
 
@@ -54,6 +55,16 @@ export default async function ServidoresPage({
       </div>
 
       <form className="mb-4 flex flex-wrap items-end gap-3">
+        <div>
+          <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-muted">Nome</label>
+          <input
+            type="search"
+            name="nome"
+            defaultValue={nome}
+            className="rounded-md border border-line bg-surface px-3 py-1.5 text-sm text-fg placeholder:text-subtle focus:border-accent focus:outline-none"
+            placeholder="Buscar por nome..."
+          />
+        </div>
         <div>
           <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-muted">Comunidade</label>
           <input
@@ -92,8 +103,13 @@ export default async function ServidoresPage({
           type="submit"
           className="rounded-md border border-line bg-surface-2 px-3 py-1.5 text-sm font-medium text-fg transition-colors hover:border-line-strong hover:bg-line"
         >
-          Filtrar
+          Pesquisar
         </button>
+        {nome || comunidade || categoria || verInativos ? (
+          <Link href="/admin/servidores" className="py-1.5 text-sm text-muted transition-colors hover:text-fg">
+            Limpar
+          </Link>
+        ) : null}
       </form>
 
       <DataTable
