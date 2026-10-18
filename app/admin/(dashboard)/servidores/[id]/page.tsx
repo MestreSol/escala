@@ -5,6 +5,7 @@ import { listarMissasDePreferencia } from "@/lib/missaPastoral";
 import { usaGraus } from "@/lib/constants";
 import { ServidorForm } from "@/components/ServidorForm";
 import { SubmitButton } from "@/components/ui/SubmitButton";
+import { CampoFoto } from "@/components/ui/CampoFoto";
 import { ActionForm } from "@/components/ui/ActionForm";
 import { getVinculosDoServidor } from "@/lib/servidorVinculo";
 import { listarIndisponibilidadesDoServidor } from "@/lib/servidorIndisponibilidade";
@@ -88,13 +89,7 @@ export default async function EditarServidorPage({ params }: { params: Promise<{
             </div>
           )}
           <div className="flex-1 space-y-3">
-            <input
-              type="file"
-              name="foto"
-              accept="image/jpeg,image/png,image/webp"
-              required
-              className="block w-full text-sm text-muted file:mr-3 file:rounded-md file:border file:border-line file:bg-surface-2 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-fg hover:file:bg-line"
-            />
+            <CampoFoto className="block w-full text-sm text-muted file:mr-3 file:rounded-md file:border file:border-line file:bg-surface-2 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-fg hover:file:bg-line" />
             <SubmitButton pendingLabel="Enviando">Salvar foto</SubmitButton>
           </div>
         </ActionForm>

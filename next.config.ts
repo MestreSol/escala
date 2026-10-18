@@ -42,6 +42,11 @@ const nextConfig: NextConfig = {
   // ("ENOENT .next/next-server.js.nft.json"), então fica desligado lá.
   output: process.env.BUILD_STANDALONE === "1" ? "standalone" : undefined,
   poweredByHeader: false,
+  experimental: {
+    // Fotos já chegam reduzidas pelo navegador (ver components/ui/CampoFoto.tsx);
+    // o limite maior é só reserva pra quando a redução não roda. A Vercel corta em 4,5MB.
+    serverActions: { bodySizeLimit: "4mb" },
+  },
   async headers() {
     return [
       { source: "/:path*", headers: cabecalhosDeSeguranca },

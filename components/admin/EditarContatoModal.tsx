@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { buttonClasses } from "@/components/ui/Button";
 import { Input, Label } from "@/components/ui/Field";
 import { SubmitButton } from "@/components/ui/SubmitButton";
+import { CampoFoto } from "@/components/ui/CampoFoto";
 import type { ResultadoAcao } from "@/lib/avisos";
 
 type Acao = (formData: FormData) => Promise<ResultadoAcao>;
@@ -158,15 +159,8 @@ export function EditarContatoModal({
                   Sem foto
                 </div>
               )}
-              <input
-                type="file"
-                name="foto"
-                accept="image/jpeg,image/png,image/webp"
-                required
-                onChange={(evento) => {
-                  const arquivo = evento.currentTarget.files?.[0];
-                  setPrevia(arquivo ? URL.createObjectURL(arquivo) : null);
-                }}
+              <CampoFoto
+                onEscolher={(arquivo) => setPrevia(arquivo ? URL.createObjectURL(arquivo) : null)}
                 className="block w-full min-w-0 text-sm text-muted file:mr-3 file:rounded-md file:border file:border-line file:bg-surface-2 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-fg hover:file:bg-line"
               />
             </div>
