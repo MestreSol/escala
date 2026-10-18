@@ -667,3 +667,92 @@ async function despublicarEscalaMesInterno(mes: string) {
 export async function despublicarEscalaMes(...args: Parameters<typeof despublicarEscalaMesInterno>) {
   return comAvisos(() => despublicarEscalaMesInterno(...args));
 }
+/**
+ * Chamada das missas "todos os coroinhas": a lista é todo servidor ativo da
+ * pastoral (mais quem já estava na lista da missa). Quem veio marcado em
+ * `presentes` fica presente; todo o resto fica com falta na hora. Presença já
+ * confirmada só o ADMIN/SUPERADMIN desfaz (ver garantirPresencaNaoTravada).
+ */
+async function salvarChamadaTodosInterno(ocorrenciaId: string, formData: FormData) {
+  const { usuario, paroquiaId, pastoralId } = await exigirPastoralParaPresenca();
+  await garantirOcorrenciaParaPresenca(usuario, ocorrenciaId, paroquiaId);
+  const podeCorrigir = usuario.papel === "ADMIN" || usuario.papel === "SUPERADMIN";
+
+  const [{ data: servidores, error: servidoresError }, { data: existentes, error: existentesError }] =
+    await Promise.all([
+      supabase
+        .from("Servidor")
+        .select("id, nome")
+        .eq("pastoralId", pastoralId)
+        .eq("ativo", true)
+        .returns<{ id: string; nome: string }[]>(),
+      supabase
+        .from("EscalaAtribuicao")
+        .select("id, servidorId, slotIndex, presente")
+        .eq("pastoralId", pastoralId)
+        .eq("ocorrenciaId", ocorrenciaId)
+        .is("funcaoId", null)
+        .returns<{ id: string; servidorId: string | null; slotIndex: number; presente: boolean | null }[]>(),
+    ]);
+  if (servidoresError) throw servidoresError;
+  if (existentesError) throw existentesError;
+
+  const presentes = new Set(formData.getAll("presentes").map(String));
+  const linhaPorServidor = new Map((existentes ?? []).filter((a) => a.servidorId).map((a) => [a.servidorId!, a]));
+  if (!podeCorrigir) {
+    for (const [servidorId, linha] of linhaPorServidor) if (linha.presente === true) presentes.add(servidorId);
+  }
+  const naChamada = new Set([...(servidores ?? []).map((s) => s.id), ...linhaPorServidor.keys()]);
+
+  const idsPresentes: string[] = [];
+  const idsFalta: string[] = [];
+  for (const [servidorId, linha] of linhaPorServidor) {
+    (presentes.has(servidorId) ? idsPresentes : idsFalta).push(linha.id);
+  }
+
+  let proximoSlot = Math.max(0, ...(existentes ?? []).map((a) => a.slotIndex)) + 1;
+  const novas = (servidores ?? [])
+    .filter((s) => !linhaPorServidor.has(s.id))
+    .map((s) => ({
+      id: generateId(),
+      pastoralId,
+      ocorrenciaId,
+      funcaoId: null,
+      slotIndex: proximoSlot++,
+      servidorId: s.id,
+      servidorNomeSnapshot: s.nome,
+      geradoAutomaticamente: false,
+      presente: presentes.has(s.id),
+      updatedAt: nowIso(),
+    }));
+
+  const ignorados = [...presentes].filter((id) => !naChamada.has(id));
+  if (ignorados.length > 0) throw new AvisoAoUsuario("A lista mudou enquanto você marcava. Recarregue a página.");
+
+  if (novas.length > 0) {
+    const { error } = await supabase.from("EscalaAtribuicao").insert(novas);
+    if (error) throw error;
+  }
+  for (const [ids, presente] of [
+    [idsPresentes, true],
+    [idsFalta, false],
+  ] as const) {
+    if (ids.length === 0) continue;
+    const { error } = await supabase
+      .from("EscalaAtribuicao")
+      .update({ presente, updatedAt: nowIso() })
+      .in("id", ids)
+      .eq("pastoralId", pastoralId)
+      .eq("ocorrenciaId", ocorrenciaId);
+    if (error) throw error;
+  }
+
+  revalidatePath(`/admin/calendario/${ocorrenciaId}`);
+  revalidatePath("/admin/acompanhamento");
+  revalidatePath("/admin/absenteismo");
+  revalidatePath("/admin/presenca");
+}
+
+export async function salvarChamadaTodos(...args: Parameters<typeof salvarChamadaTodosInterno>) {
+  return comAvisos(() => salvarChamadaTodosInterno(...args));
+}

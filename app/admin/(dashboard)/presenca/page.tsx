@@ -4,13 +4,18 @@ import { supabase } from "@/lib/supabase";
 import { obterUsuarioAtual, pastoralDaPresenca } from "@/lib/sessao";
 import { PresencaSelect } from "@/components/admin/PresencaSelect";
 import { EditarContatoModal } from "@/components/admin/EditarContatoModal";
+import { ChamadaTodos, type ItemChamada } from "@/components/admin/ChamadaTodos";
+import { getConfigMissasMap } from "@/lib/missaPastoral";
+import { materializarOcorrencias } from "@/lib/materializarOcorrencias";
 import { formatarTelefone } from "@/lib/telefone";
 import { intervaloDeHojeNaParoquia, lerDataArmazenada, paraExibicao } from "@/lib/occurrences";
 import type { EscalaAtribuicaoRow, FuncaoRow, MissaOcorrenciaRow, MissaRow, ServidorRow } from "@/lib/types";
-import { registrarPresencaTodosAtivos } from "../calendario/actions";
+import { registrarPresencaTodosAtivos, salvarChamadaTodos } from "../calendario/actions";
 import { salvarContatos, salvarFoto } from "../contatos/actions";
 
 export const dynamic = "force-dynamic";
+
+type ServidorDaChamada = Pick<ServidorRow, "id" | "nome" | "fotoUrl" | "celular" | "celularResponsavel">;
 
 type OcorrenciaDoDia = MissaOcorrenciaRow & {
   missa: Pick<MissaRow, "horario" | "comunidade">;
@@ -25,6 +30,28 @@ export default async function PresencaDoDiaPage() {
   const usuario = await obterUsuarioAtual();
   const podeCorrigir = usuario?.papel === "ADMIN" || usuario?.papel === "SUPERADMIN";
   const { inicio, fim } = intervaloDeHojeNaParoquia();
+  await materializarOcorrencias(paroquia.id, inicio, fim);
+
+  const [configs, servidoresResult, indisponiveisResult] = await Promise.all([
+    getConfigMissasMap(pastoral.id),
+    supabase
+      .from("Servidor")
+      .select("id, nome, fotoUrl, celular, celularResponsavel")
+      .eq("pastoralId", pastoral.id)
+      .eq("ativo", true)
+      .returns<ServidorDaChamada[]>(),
+    supabase
+      .from("ServidorIndisponibilidade")
+      .select("servidorId, servidor:Servidor!inner(pastoralId)")
+      .eq("servidor.pastoralId", pastoral.id)
+      .gte("data", inicio.toISOString())
+      .lte("data", fim.toISOString())
+      .returns<{ servidorId: string }[]>(),
+  ]);
+  if (servidoresResult.error) throw servidoresResult.error;
+  if (indisponiveisResult.error) throw indisponiveisResult.error;
+  const servidoresAtivos = servidoresResult.data ?? [];
+  const avisaramHoje = new Set((indisponiveisResult.data ?? []).map((i) => i.servidorId));
 
   const { data, error } = await supabase
     .from("MissaOcorrencia")
@@ -40,6 +67,7 @@ export default async function PresencaDoDiaPage() {
   const ocorrencias = (data ?? [])
     .map((ocorrencia) => ({
       ...ocorrencia,
+      todos: Boolean(configs.get(ocorrencia.missaId)?.escalarTodosAtivos),
       atribuicoes: ocorrencia.atribuicoes
         .filter((a) => a.pastoralId === pastoral.id && a.servidorId)
         .sort(
@@ -49,7 +77,41 @@ export default async function PresencaDoDiaPage() {
             (a.servidorNomeSnapshot ?? a.servidor?.nome ?? "").localeCompare(b.servidorNomeSnapshot ?? b.servidor?.nome ?? "")
         ),
     }))
-    .filter((ocorrencia) => ocorrencia.atribuicoes.length > 0);
+    .filter((ocorrencia) => ocorrencia.todos || ocorrencia.atribuicoes.length > 0);
+
+  // Missa "todos": a chamada é todo servidor ativo, mais quem já estava na lista dela.
+  function itensDaChamada(ocorrencia: (typeof ocorrencias)[number]): ItemChamada[] {
+    const linhas = new Map(
+      ocorrencia.atribuicoes.filter((a) => a.funcaoId === null).map((a) => [a.servidorId!, a])
+    );
+    const pessoas = new Map<string, ServidorDaChamada>(servidoresAtivos.map((s) => [s.id, s]));
+    for (const [servidorId, linha] of linhas) {
+      if (!pessoas.has(servidorId) && linha.servidor) pessoas.set(servidorId, { id: servidorId, ...linha.servidor });
+    }
+    return [...pessoas.values()]
+      .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"))
+      .map((servidor) => {
+        const presenteSalvo = linhas.get(servidor.id)?.presente ?? null;
+        return {
+          servidorId: servidor.id,
+          nome: servidor.nome,
+          fotoUrl: servidor.fotoUrl,
+          presenteSalvo,
+          travado: presenteSalvo === true && !podeCorrigir,
+          avisouIndisponivel: avisaramHoje.has(servidor.id),
+          editar: (
+            <EditarContatoModal
+              nome={servidor.nome}
+              fotoUrl={servidor.fotoUrl}
+              celular={formatarTelefone(servidor.celular)}
+              celularResponsavel={formatarTelefone(servidor.celularResponsavel)}
+              salvarContatos={salvarContatos.bind(null, servidor.id)}
+              salvarFoto={salvarFoto.bind(null, servidor.id)}
+            />
+          ),
+        };
+      });
+  }
 
   const hoje = format(paraExibicao(inicio), "eeee, d 'de' MMMM", { locale: ptBR });
 
@@ -71,7 +133,15 @@ export default async function PresencaDoDiaPage() {
                 <h2 className="text-base font-semibold text-fg">
                   {format(paraExibicao(lerDataArmazenada(ocorrencia.data)), "HH:mm")} — {ocorrencia.missa.comunidade}
                 </h2>
+                {ocorrencia.todos ? <p className="text-xs text-accent">Todos os {pastoral.nome.toLowerCase()}</p> : null}
               </header>
+              {ocorrencia.todos ? (
+                <ChamadaTodos
+                  key={ocorrencia.atribuicoes.map((a) => `${a.servidorId}:${a.presente}`).join(",")}
+                  itens={itensDaChamada(ocorrencia)}
+                  salvar={salvarChamadaTodos.bind(null, ocorrencia.id)}
+                />
+              ) : (
               <ul className="divide-y divide-line/60">
                 {ocorrencia.atribuicoes.map((atribuicao) => {
                   const salvarPresenca = registrarPresencaTodosAtivos.bind(null, ocorrencia.id, atribuicao.id);
@@ -113,6 +183,7 @@ export default async function PresencaDoDiaPage() {
                   );
                 })}
               </ul>
+              )}
             </section>
           ))}
         </div>
