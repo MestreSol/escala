@@ -50,7 +50,14 @@ export async function enviarFotoServidor(servidorId: string, arquivo: File): Pro
   const { error } = await supabase.storage.from(BUCKET).upload(caminho, arquivo, {
     contentType: tipoReal,
   });
-  if (error) throw error;
+  if (error) {
+    // Aparece nos logs da Vercel; pro usuário vai um aviso legível (erro lançado vira só "500").
+    console.error("Falha ao enviar foto pro Storage:", error);
+    if (/bucket not found/i.test(error.message)) {
+      throw new AvisoAoUsuario(`O armazenamento de fotos não está configurado (bucket "${BUCKET}" não existe no Supabase).`);
+    }
+    throw new AvisoAoUsuario(`Não foi possível enviar a foto: ${error.message}`);
+  }
 
   const { data } = supabase.storage.from(BUCKET).getPublicUrl(caminho);
   return data.publicUrl;
