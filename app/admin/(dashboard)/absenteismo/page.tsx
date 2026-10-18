@@ -276,9 +276,18 @@ export default async function AbsenteismoPage({ searchParams }: { searchParams: 
                   ),
                   escalado: <span className="tabular-nums text-muted">{total}</span>,
                   presencas: <span className="tabular-nums text-muted">{r.presencas}</span>,
-                  faltas: (
-                    <span className={`tabular-nums ${r.faltas > 0 ? "text-fg" : "text-subtle"}`}>{r.faltas}</span>
-                  ),
+                  faltas:
+                    r.faltas > 0 ? (
+                      <Link
+                        href={`/admin/absenteismo/${servidorId}`}
+                        title="Ver e corrigir as faltas"
+                        className="tabular-nums font-medium text-fg underline decoration-line-strong underline-offset-4 transition-colors hover:text-accent hover:decoration-accent"
+                      >
+                        {r.faltas}
+                      </Link>
+                    ) : (
+                      <span className="tabular-nums text-subtle">0</span>
+                    ),
                   absenteismo: alto ? (
                     <Badge color="red">{pct(taxa)}</Badge>
                   ) : (
@@ -341,7 +350,8 @@ export default async function AbsenteismoPage({ searchParams }: { searchParams: 
       <p className="mt-6 text-xs leading-relaxed text-subtle">
         Absenteísmo = faltas ÷ escalações com presença registrada. Em vermelho: acima de {pct(limiteAlto)} com pelo menos{" "}
         {MINIMO_REGISTROS_FREQUENCIA} registros no período. No sorteio da escala, quem tem presença abaixo de{" "}
-        {pct(LIMIAR_FREQUENCIA)} no histórico todo perde prioridade.
+        {pct(LIMIAR_FREQUENCIA)} no histórico todo perde prioridade. Falta registrada por engano? Clique no número de
+        faltas da pessoa para corrigir.
       </p>
     </div>
   );
