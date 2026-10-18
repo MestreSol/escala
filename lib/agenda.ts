@@ -6,10 +6,13 @@
 export const FUSO_ICS = "America/Sao_Paulo";
 const DURACAO_MINUTOS = 90;
 
-/** `rotuloTodos` é o da pastoral (ver rotuloTodos em lib/constants.ts). */
-export function tituloDoEvento(missa: { funcoes: string[]; todosAtivos: boolean }, rotuloTodos: string): string {
-  if (missa.todosAtivos) return `Missa — ${rotuloTodos.toLowerCase()}`;
-  return missa.funcoes.length > 0 ? `Servir na missa — ${missa.funcoes.join(" + ")}` : "Servir na missa";
+/**
+ * `rotuloTodos` é o da pastoral (ver rotuloTodos em lib/constants.ts). Sem a
+ * função de propósito: fora do painel ninguém vê quem faz o quê — só quem
+ * registra a presença.
+ */
+export function tituloDoEvento(missa: { todosAtivos: boolean }, rotuloTodos: string): string {
+  return missa.todosAtivos ? `Missa — ${rotuloTodos.toLowerCase()}` : "Servir na missa";
 }
 
 /** "20260906T093000" a partir do relógio de parede. */

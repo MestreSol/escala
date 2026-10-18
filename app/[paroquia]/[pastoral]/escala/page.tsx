@@ -100,17 +100,19 @@ export default async function EscalaPublicaPage({
       inicio: format(o.data, "yyyy-MM-dd'T'HH:mm"),
       comunidade: o.comunidade,
       todosAtivos: o.todosAtivos,
-      linhas: o.linhas.map((l) => ({
-        funcao: `${l.funcaoNome ?? "Presença"}${l.totalSlotsDaFuncao > 1 ? ` #${l.slotIndex}` : ""}`,
-        nome: l.servidorNome,
-      })),
+      // Só os nomes, em ordem alfabética: a função (e até a ordem das vagas)
+      // fica só no painel, pra quem registra a presença.
+      nomes: [...new Set(o.linhas.map((l) => l.servidorNome).filter((n): n is string => Boolean(n)))].sort((a, b) =>
+        a.localeCompare(b, "pt-BR")
+      ),
+      vagasEmAberto: o.linhas.filter((l) => !l.servidorNome).length,
     }));
 
     idPorNome = Object.fromEntries((servidoresResult.data ?? []).map((s) => [s.nome, s.id]));
     nomes = [
       ...new Set([
         ...(servidoresResult.data ?? []).map((s) => s.nome),
-        ...missas.flatMap((m) => m.linhas.map((l) => l.nome)).filter((n): n is string => Boolean(n)),
+        ...missas.flatMap((m) => m.nomes),
       ]),
     ].sort((a, b) => a.localeCompare(b, "pt-BR"));
   }

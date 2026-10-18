@@ -22,14 +22,11 @@ export type MissaNaAgenda = {
   /** Relógio de parede (componentes UTC = hora local da paróquia). */
   inicio: Date;
   comunidade: string;
-  /** Funções da pessoa nessa missa (mais de uma quando há acúmulo). */
-  funcoes: string[];
   todosAtivos: boolean;
 };
 
 type AtribuicaoComOcorrencia = {
   ocorrenciaId: string;
-  funcao: { nome: string } | null;
   ocorrencia: { id: string; data: string; missa: { comunidade: string } };
 };
 
@@ -54,7 +51,7 @@ export async function buscarMissasDoServidor(pastoralId: string, servidorId: str
   const [atribuicoesResult, todosAtivosResult] = await Promise.all([
     supabase
       .from("EscalaAtribuicao")
-      .select("ocorrenciaId, funcao:Funcao(nome), ocorrencia:MissaOcorrencia!inner(id, data, missa:Missa(comunidade))")
+      .select("ocorrenciaId, ocorrencia:MissaOcorrencia!inner(id, data, missa:Missa(comunidade))")
       .eq("servidorId", servidorId)
       .gte("ocorrencia.data", inicio.toISOString())
       .lte("ocorrencia.data", fim.toISOString())
@@ -82,7 +79,6 @@ export async function buscarMissasDoServidor(pastoralId: string, servidorId: str
       ocorrenciaId: ocorrencia.id,
       inicio: data,
       comunidade: ocorrencia.missa.comunidade,
-      funcoes: [],
       todosAtivos: true,
     });
   }
@@ -90,16 +86,11 @@ export async function buscarMissasDoServidor(pastoralId: string, servidorId: str
   for (const atribuicao of atribuicoesResult.data ?? []) {
     const data = lerDataArmazenada(atribuicao.ocorrencia.data);
     if (!noMesPublicado(data)) continue;
-    const existente = porOcorrencia.get(atribuicao.ocorrenciaId);
-    const funcao = atribuicao.funcao?.nome;
-    if (existente) {
-      if (funcao && !existente.funcoes.includes(funcao)) existente.funcoes.push(funcao);
-    } else {
+    if (!porOcorrencia.has(atribuicao.ocorrenciaId)) {
       porOcorrencia.set(atribuicao.ocorrenciaId, {
         ocorrenciaId: atribuicao.ocorrenciaId,
         inicio: data,
         comunidade: atribuicao.ocorrencia.missa.comunidade,
-        funcoes: funcao ? [funcao] : [],
         todosAtivos: false,
       });
     }
@@ -164,7 +155,7 @@ export function gerarIcs(
 
   for (const missa of missas) {
     const descricao = [
-      missa.todosAtivos ? `${opcoes.rotuloTodos} servem nesta missa.` : `Função: ${missa.funcoes.join(" + ") || "—"}`,
+      ...(missa.todosAtivos ? [`${opcoes.rotuloTodos} servem nesta missa.`] : []),
       `Comunidade: ${missa.comunidade}`,
       `Escala completa: ${opcoes.urlEscala}`,
     ].join("\n");

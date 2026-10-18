@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import clsx from "clsx";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
@@ -16,7 +16,9 @@ export type MissaPublica = {
   inicio: string;
   comunidade: string;
   todosAtivos: boolean;
-  linhas: { funcao: string; nome: string | null }[];
+  /** Quem serve, em ordem alfabética — sem função (ver page.tsx). */
+  nomes: string[];
+  vagasEmAberto: number;
 };
 
 const CHAVE_NOME_SALVO = "escala:meu-nome";
@@ -84,23 +86,21 @@ export function EscalaPublica({
   const proximaId = missas.find((m) => m.inicio >= agora)?.id ?? null;
   const hoje = agora.slice(0, 10);
 
-  const participa = (missa: MissaPublica) =>
-    Boolean(meuNome) && (missa.todosAtivos || missa.linhas.some((l) => l.nome === meuNome));
+  // Ao abrir, rola até a próxima missa (as que já passaram ficam pra cima).
+  const jaRolou = useRef(false);
+  useEffect(() => {
+    if (jaRolou.current || !proximaId) return;
+    jaRolou.current = true;
+    const alvo = document.getElementById(`missa-${proximaId}`);
+    if (!alvo) return;
+    const reduzirMovimento = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    alvo.scrollIntoView({ block: "center", behavior: reduzirMovimento ? "auto" : "smooth" });
+  }, [proximaId]);
 
-  const minhas = useMemo(
-    () =>
-      meuNome
-        ? missas
-            .filter((m) => m.todosAtivos || m.linhas.some((l) => l.nome === meuNome))
-            .map((m) => ({
-              missa: m,
-              funcoes: m.todosAtivos
-                ? [rotuloTodos]
-                : m.linhas.filter((l) => l.nome === meuNome).map((l) => l.funcao),
-            }))
-        : [],
-    [missas, meuNome, rotuloTodos]
-  );
+  const participa = (missa: MissaPublica) =>
+    Boolean(meuNome) && (missa.todosAtivos || missa.nomes.includes(meuNome!));
+
+  const minhas = meuNome ? missas.filter((m) => m.todosAtivos || m.nomes.includes(meuNome)) : [];
 
   const visiveis = soAsMinhas && meuNome ? missas.filter(participa) : missas;
   const porDia = new Map<string, MissaPublica[]>();
@@ -159,7 +159,7 @@ export function EscalaPublica({
           </div>
           {minhas.length > 0 ? (
             <ul className="mt-3 space-y-1.5 text-sm">
-              {minhas.map(({ missa, funcoes }) => (
+              {minhas.map((missa) => (
                 <li
                   key={missa.id}
                   className={clsx("flex justify-between gap-3", missa.inicio < agora && "opacity-50")}
@@ -168,18 +168,12 @@ export function EscalaPublica({
                     {missa.diaRotulo} · <span className="tabular-nums text-accent">{missa.horario}</span>
                   </span>
                   <span className="flex items-center gap-2 text-right font-medium text-fg">
-                    {funcoes.join(" + ")}
+                    {missa.todosAtivos ? rotuloTodos : missa.comunidade}
                     {missa.inicio >= agora ? (
                       <a
                         href={linkGoogleAgenda({
                           inicioLocal: missa.inicio,
-                          titulo: tituloDoEvento(
-                            {
-                              funcoes: funcoes.map((f) => f.replace(/ #\d+$/, "")),
-                              todosAtivos: missa.todosAtivos,
-                            },
-                            rotuloTodos
-                          ),
+                          titulo: tituloDoEvento({ todosAtivos: missa.todosAtivos }, rotuloTodos),
                           comunidade: missa.comunidade,
                           detalhes: `Escala completa: ${origem}/escala`,
                         })}
@@ -262,8 +256,9 @@ function CartaoMissa({
 }) {
   return (
     <article
+      id={`missa-${missa.id}`}
       className={clsx(
-        "rounded-xl border bg-surface p-4 transition-opacity",
+        "scroll-mt-6 rounded-xl border bg-surface p-4 transition-opacity",
         destacada ? "border-accent/40" : "border-line",
         passada && "opacity-55"
       )}
@@ -285,32 +280,32 @@ function CartaoMissa({
 
       {missa.todosAtivos ? (
         <p className="py-2 text-sm font-semibold uppercase tracking-wide text-accent">{rotuloTodos}</p>
-      ) : missa.linhas.length === 0 ? (
+      ) : missa.nomes.length === 0 && missa.vagasEmAberto === 0 ? (
         <p className="py-2 text-sm text-subtle">Escala ainda não definida.</p>
       ) : (
-        <ul className="divide-y divide-line/60 text-sm">
-          {missa.linhas.map((linha, index) => {
-            const minha = Boolean(meuNome) && linha.nome === meuNome;
-            return (
-              <li
-                key={index}
-                className={clsx(
-                  "-mx-2 flex items-center justify-between gap-3 rounded-md px-2 py-1.5",
-                  minha && "bg-accent-soft"
-                )}
-              >
-                <span className="text-muted">{linha.funcao}</span>
-                {linha.nome ? (
-                  <span className={clsx("text-right font-medium", minha ? "text-accent" : "text-fg")}>
-                    {linha.nome}
-                  </span>
-                ) : (
-                  <span className="text-right text-danger/80">Vaga em aberto</span>
-                )}
-              </li>
-            );
-          })}
-        </ul>
+        <>
+          <ul className="divide-y divide-line/60 text-sm">
+            {missa.nomes.map((nome) => {
+              const minha = Boolean(meuNome) && nome === meuNome;
+              return (
+                <li
+                  key={nome}
+                  className={clsx(
+                    "-mx-2 rounded-md px-2 py-1.5 font-medium",
+                    minha ? "bg-accent-soft text-accent" : "text-fg"
+                  )}
+                >
+                  {nome}
+                </li>
+              );
+            })}
+          </ul>
+          {missa.vagasEmAberto > 0 ? (
+            <p className="mt-2 text-xs text-danger/80">
+              {missa.vagasEmAberto} {missa.vagasEmAberto === 1 ? "vaga em aberto" : "vagas em aberto"}
+            </p>
+          ) : null}
+        </>
       )}
     </article>
   );
