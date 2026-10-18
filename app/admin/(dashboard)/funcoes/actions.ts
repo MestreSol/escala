@@ -12,6 +12,7 @@ import { generateId, nowIso, erroDoBanco } from "@/lib/db";
 import { funcaoSchema } from "@/lib/validations";
 import { setFuncoesQuePodeAssumir } from "@/lib/funcaoAcumulacao";
 import { setFuncoesPareadas } from "@/lib/funcaoPar";
+import { setHabilitadosDaFuncao } from "@/lib/funcaoHabilitado";
 
 export type FuncaoFormState = { error?: string };
 
@@ -135,4 +136,32 @@ async function saveFuncaoParesInterno(funcaoId: string, formData: FormData) {
 
 export async function saveFuncaoPares(...args: Parameters<typeof saveFuncaoParesInterno>) {
   return comAvisos(() => saveFuncaoParesInterno(...args));
+}async function saveFuncaoHabilitadosInterno(funcaoId: string, formData: FormData) {
+  const { pastoralId } = await exigirPastoral();
+  await garantirDaPastoral("Funcao", funcaoId, pastoralId);
+  const { data: servidores, error } = await supabase
+    .from("Servidor")
+    .select("id")
+    .eq("pastoralId", pastoralId)
+    .returns<{ id: string }[]>();
+  if (error) throw error;
+
+  const somenteHabilitados = formData.get("somenteHabilitados") === "on";
+  const selecionados = (servidores ?? []).map((s) => s.id).filter((id) => formData.get(`hab_${id}`) === "on");
+
+  const { error: updateError } = await supabase
+    .from("Funcao")
+    .update({ somenteHabilitados, updatedAt: nowIso() })
+    .eq("id", funcaoId)
+    .eq("pastoralId", pastoralId);
+  if (updateError) throw updateError;
+  await setHabilitadosDaFuncao(funcaoId, selecionados);
+
+  revalidatePath("/admin/funcoes");
+  revalidatePath(`/admin/funcoes/${funcaoId}`);
+}
+
+/** Liga/desliga a restrição da função e grava quem pode exercê-la. */
+export async function saveFuncaoHabilitados(...args: Parameters<typeof saveFuncaoHabilitadosInterno>) {
+  return comAvisos(() => saveFuncaoHabilitadosInterno(...args));
 }

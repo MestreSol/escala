@@ -61,6 +61,8 @@ export type FuncaoRow = {
   grauMinimo: Grau;
   quantidadePadrao: number;
   exigeGrupoCompleto: boolean;
+  /** Só quem está em FuncaoHabilitado pode exercer (ver lib/funcaoHabilitado.ts). */
+  somenteHabilitados: boolean;
   ativo: boolean;
   createdAt: string;
   updatedAt: string;

@@ -143,6 +143,9 @@ model Funcao {
   /// houver gente para TODAS ao mesmo tempo; senão, todas ficam em aberto
   /// (ex: Ceroferário sempre anda em dupla, não faz sentido só 1 dos 2).
   exigeGrupoCompleto Boolean    @default(false)
+  /// Se true, só os servidores escolhidos em FuncaoHabilitado podem exercer
+  /// esta função (ex: uma função que só alguns coroinhas sabem fazer).
+  somenteHabilitados Boolean    @default(false)
   ativo              Boolean    @default(true)
   createdAt          DateTime   @default(now())
   updatedAt          DateTime   @updatedAt
@@ -158,6 +161,7 @@ model Funcao {
 
   paresComoA FuncaoPar[] @relation("FuncaoParA")
   paresComoB FuncaoPar[] @relation("FuncaoParB")
+  habilitados FuncaoHabilitado[]
 
   paroquia Paroquia @relation(fields: [paroquiaId], references: [id], onDelete: Cascade)
   pastoral Pastoral @relation(fields: [pastoralId], references: [id], onDelete: Cascade)
@@ -263,6 +267,7 @@ model Servidor {
   preferenciasMissas ServidorMissaPreferencia[]
   atribuicoes        EscalaAtribuicao[]
   indisponibilidades ServidorIndisponibilidade[]
+  funcoesHabilitadas FuncaoHabilitado[]
 
   vinculosComoA ServidorVinculo[] @relation("VinculoA")
   vinculosComoB ServidorVinculo[] @relation("VinculoB")
@@ -295,6 +300,19 @@ model ServidorIndisponibilidade {
 /// Duas funções diferentes que trabalham juntas na missa (ex: Turiferário e
 /// Naveteiro): o gerador trata as duas vagas como um par e tenta juntar um
 /// servidor experiente com um inexperiente. Par não ordenado (A < B).
+/// Quem pode exercer uma função marcada como `somenteHabilitados`.
+model FuncaoHabilitado {
+  id         String @id @default(cuid())
+  funcaoId   String
+  servidorId String
+
+  funcao   Funcao   @relation(fields: [funcaoId], references: [id], onDelete: Cascade)
+  servidor Servidor @relation(fields: [servidorId], references: [id], onDelete: Cascade)
+
+  @@unique([funcaoId, servidorId])
+  @@index([servidorId])
+}
+
 model FuncaoPar {
   id         String @id @default(cuid())
   pastoralId String

@@ -25,6 +25,11 @@ export type SlotParaPreencher = {
   modoEscalacao: ModoEscalacao;
   /** Só usado quando modoEscalacao === "COMUNIDADE". */
   comunidadeResponsavel?: string;
+  /**
+   * Função restrita (Funcao.somenteHabilitados): só esses servidores podem
+   * ocupar a vaga. Ausente = qualquer um com o grau mínimo.
+   */
+  habilitados?: Set<string>;
 };
 
 export type ServidorCandidato = {
@@ -116,6 +121,11 @@ type UnidadeParaPreencher = {
 /** Quem tem um grau maior também pode exercer funções dos graus abaixo (hierarquia). */
 function grauCompativel(servidor: ServidorCandidato, grauMinimo: Grau): boolean {
   return GRAU_ORDEM[servidor.categoria] >= GRAU_ORDEM[grauMinimo];
+}
+
+/** Grau suficiente e, se a função for restrita, estar entre os escolhidos pra ela. */
+function podeFazer(servidor: ServidorCandidato, vaga: Pick<SlotParaPreencher, "grauMinimo" | "habilitados">): boolean {
+  return grauCompativel(servidor, vaga.grauMinimo) && (!vaga.habilitados || vaga.habilitados.has(servidor.id));
 }
 
 /** Se o servidor não marcou o dia da vaga como indisponível (ver ServidorCandidato.diasIndisponiveis). */
@@ -349,7 +359,7 @@ function alocarGrupo(
       return;
     }
     for (const vaga of vagas) {
-      if (escolhidas.includes(vaga) || !grauCompativel(membros[i], vaga.grauMinimo)) continue;
+      if (escolhidas.includes(vaga) || !podeFazer(membros[i], vaga)) continue;
       escolhidas.push(vaga);
       buscar(i + 1);
       escolhidas.pop();
@@ -585,7 +595,7 @@ export function gerarEscala(
             servidores.filter(
               (s) =>
                 elegivelParaMissa(s, slot) &&
-                grauCompativel(s, slot.grauMinimo) &&
+                podeFazer(s, slot) &&
                 !usadosNaOcorrencia.has(s.id) &&
                 !usadosNoDia.get(diaChave(slot.data))?.has(s.id) &&
                 disponivelNoDia(s, slot.data)
@@ -621,7 +631,7 @@ export function gerarEscala(
       const candidatosBase = servidores.filter(
         (s) =>
           elegivelParaMissa(s, unidade.slots[0]) &&
-          grauCompativel(s, unidade.grauMinimo) &&
+          podeFazer(s, unidade.slots[0]) &&
           !usadosNaOcorrencia.has(s.id) &&
           !usadosNoDia.get(diaChave(diaUnidade))?.has(s.id) &&
           disponivelNoDia(s, diaUnidade)
@@ -693,7 +703,7 @@ export function gerarEscala(
         const candidato = servidorPorId.get(candidatoId);
         if (
           candidato &&
-          grauCompativel(candidato, slot.grauMinimo) &&
+          podeFazer(candidato, slot) &&
           ajustarPelaExperiencia([candidato], slot).length > 0
         ) {
           acumuladorId = candidatoId;

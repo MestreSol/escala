@@ -12,6 +12,7 @@ import { generateId, nowIso } from "@/lib/db";
 import { getAcumulacoesMap } from "@/lib/funcaoAcumulacao";
 import { getVinculosMap } from "@/lib/servidorVinculo";
 import { getParesDeFuncoes } from "@/lib/funcaoPar";
+import { getHabilitadosMap } from "@/lib/funcaoHabilitado";
 import { getServidoresComFrequenciaBaixa } from "@/lib/frequencia";
 import { getIndisponibilidadeMap } from "@/lib/servidorIndisponibilidade";
 import { publicarMes, despublicarMes } from "@/lib/escalaPublicada";
@@ -54,7 +55,7 @@ async function montarSlotsEmAberto(paroquiaId: string, pastoralId: string, perio
     .returns<{ id: string; missaId: string; data: string; missa: { dataUnica: string | null } }[]>();
   if (ocorrenciasError) throw ocorrenciasError;
 
-  const [{ data: requisitos, error: requisitosError }, configs] = await Promise.all([
+  const [{ data: requisitos, error: requisitosError }, configs, habilitadosPorFuncao] = await Promise.all([
     supabase
       .from("MissaFuncaoRequisito")
       .select("*, funcao:Funcao!inner(*)")
@@ -62,6 +63,7 @@ async function montarSlotsEmAberto(paroquiaId: string, pastoralId: string, perio
       .eq("ativo", true)
       .returns<(MissaFuncaoRequisitoRow & { funcao: FuncaoRow })[]>(),
     getConfigMissasMap(pastoralId),
+    getHabilitadosMap(pastoralId),
   ]);
   if (requisitosError) throw requisitosError;
 
@@ -123,6 +125,7 @@ async function montarSlotsEmAberto(paroquiaId: string, pastoralId: string, perio
           slotIndex,
           modoEscalacao,
           comunidadeResponsavel: config.comunidadeResponsavel ?? undefined,
+          habilitados: habilitadosPorFuncao.get(req.funcaoId),
         });
       }
     }

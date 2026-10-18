@@ -7,8 +7,9 @@ import { SubmitButton } from "@/components/ui/SubmitButton";
 import { ActionForm } from "@/components/ui/ActionForm";
 import { getFuncoesQuePodeAssumir } from "@/lib/funcaoAcumulacao";
 import { getFuncoesPareadas } from "@/lib/funcaoPar";
+import { getHabilitadosDaFuncao } from "@/lib/funcaoHabilitado";
 import type { FuncaoRow } from "@/lib/types";
-import { updateFuncao, saveFuncaoAcumulacoes, saveFuncaoPares } from "../actions";
+import { updateFuncao, saveFuncaoAcumulacoes, saveFuncaoPares, saveFuncaoHabilitados } from "../actions";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +17,7 @@ export default async function EditarFuncaoPage({ params }: { params: Promise<{ i
   const { id } = await params;
   const { pastoral } = await pastoralDoPainel();
 
-  const [funcaoResult, outrasFuncoesResult, podeAssumirIdsLista, pareadasIdsLista] = await Promise.all([
+  const [funcaoResult, outrasFuncoesResult, podeAssumirIdsLista, pareadasIdsLista, habilitadosLista, servidoresResult] = await Promise.all([
     supabase.from("Funcao").select("*").eq("id", id).eq("pastoralId", pastoral.id).returns<FuncaoRow[]>().maybeSingle(),
     supabase
       .from("Funcao")
@@ -28,7 +29,18 @@ export default async function EditarFuncaoPage({ params }: { params: Promise<{ i
       .returns<{ id: string; nome: string }[]>(),
     getFuncoesQuePodeAssumir(id),
     getFuncoesPareadas(id),
+    getHabilitadosDaFuncao(id),
+    supabase
+      .from("Servidor")
+      .select("id, nome")
+      .eq("pastoralId", pastoral.id)
+      .eq("ativo", true)
+      .order("nome", { ascending: true })
+      .returns<{ id: string; nome: string }[]>(),
   ]);
+  if (servidoresResult.error) throw servidoresResult.error;
+  const servidores = servidoresResult.data ?? [];
+  const habilitados = new Set(habilitadosLista);
 
   if (funcaoResult.error) throw funcaoResult.error;
   if (outrasFuncoesResult.error) throw outrasFuncoesResult.error;
@@ -54,6 +66,53 @@ export default async function EditarFuncaoPage({ params }: { params: Promise<{ i
           submitLabel="Salvar alterações"
           usaGraus={usaGraus(pastoral.tipo)}
         />
+      </div>
+
+      <div>
+        <h2 className="mb-1 text-lg font-semibold text-fg">Quem pode fazer</h2>
+        <p className="mb-4 text-sm text-muted">
+          Para uma função que só alguns sabem fazer: ligue a restrição e marque quem pode. A escala só sorteia
+          esses para <strong>{funcao.nome}</strong>; se nenhum deles puder na missa, a vaga fica em aberto.
+        </p>
+        <ActionForm
+          action={saveFuncaoHabilitados.bind(null, funcao.id)}
+          successMessage="Quem pode fazer foi salvo."
+          className="space-y-3"
+        >
+          <label className="flex items-center gap-3 rounded-md border border-accent/30 bg-accent-soft px-4 py-3">
+            <input
+              type="checkbox"
+              name="somenteHabilitados"
+              defaultChecked={funcao.somenteHabilitados}
+              className="h-4 w-4 rounded border-line-strong"
+            />
+            <span className="text-sm font-medium text-fg">Só os servidores marcados abaixo podem fazer esta função</span>
+          </label>
+          {servidores.length === 0 ? (
+            <p className="text-sm text-muted">Nenhum servidor ativo cadastrado.</p>
+          ) : (
+            <div className="grid max-h-80 grid-cols-1 gap-2 overflow-y-auto sm:grid-cols-2">
+              {servidores.map((servidor) => (
+                <label
+                  key={servidor.id}
+                  className="flex cursor-pointer items-center gap-3 rounded-md border border-line bg-surface px-4 py-2.5 has-[:checked]:border-accent/50"
+                >
+                  <input
+                    type="checkbox"
+                    name={`hab_${servidor.id}`}
+                    defaultChecked={habilitados.has(servidor.id)}
+                    className="h-4 w-4 rounded border-line-strong"
+                  />
+                  <span className="text-sm font-medium text-fg">{servidor.nome}</span>
+                </label>
+              ))}
+            </div>
+          )}
+          {funcao.somenteHabilitados && habilitados.size === 0 ? (
+            <p className="text-sm text-warn">A restrição está ligada mas ninguém foi marcado: essa vaga vai ficar sempre em aberto.</p>
+          ) : null}
+          <SubmitButton pendingLabel="Salvando">Salvar quem pode fazer</SubmitButton>
+        </ActionForm>
       </div>
 
       <div>
