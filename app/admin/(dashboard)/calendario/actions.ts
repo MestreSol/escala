@@ -21,6 +21,7 @@ import { intervaloDeHojeNaParoquia, lerDataArmazenada } from "@/lib/occurrences"
 import {
   gerarEscala,
   diaChave,
+  chaveIndisponibilidade,
   type SlotParaPreencher,
   type ServidorCandidato,
   type ModoEscalacao,
@@ -288,9 +289,13 @@ async function validarSemConflitoNoDia(servidorId: string, ocorrenciaId: string,
     .returns<{ data: string }[]>();
   if (indisponibilidadeError) throw indisponibilidadeError;
 
-  const indisponivelNoDia = (indisponibilidades ?? []).some((i) => diaChave(lerDataArmazenada(i.data)) === diaAtual);
-  if (indisponivelNoDia) {
+  const dataMissa = lerDataArmazenada(ocorrenciaAtual.data);
+  const avisos = new Set((indisponibilidades ?? []).map((i) => chaveIndisponibilidade(lerDataArmazenada(i.data))));
+  if (avisos.has(diaAtual)) {
     throw new AvisoAoUsuario(`${servidorNome} avisou que não pode servir neste dia.`);
+  }
+  if (avisos.has(`m:${dataMissa.getTime()}`)) {
+    throw new AvisoAoUsuario(`${servidorNome} avisou que não pode servir nesta missa.`);
   }
 }
 
@@ -758,4 +763,79 @@ async function salvarChamadaTodosInterno(ocorrenciaId: string, formData: FormDat
 
 export async function salvarChamadaTodos(...args: Parameters<typeof salvarChamadaTodosInterno>) {
   return comAvisos(() => salvarChamadaTodosInterno(...args));
+}
+
+/**
+ * Presença de quem serviu sem estar na escala: entra na missa "Sem função"
+ * (funcaoId null) já como presente. Vale pro PRESENCA também (missas de hoje).
+ */
+async function adicionarSemFuncaoInterno(ocorrenciaId: string, formData: FormData) {
+  const { usuario, paroquiaId, pastoralId } = await exigirPastoralParaPresenca();
+  await garantirOcorrenciaParaPresenca(usuario, ocorrenciaId, paroquiaId);
+  const servidorId = String(formData.get("servidorId") ?? "").trim();
+  if (!servidorId) throw new AvisoAoUsuario("Escolha quem serviu.");
+  await garantirDaPastoral("Servidor", servidorId, pastoralId);
+
+  const [{ data: servidor, error: servidorError }, { data: existentes, error: existentesError }] = await Promise.all([
+    supabase.from("Servidor").select("nome").eq("id", servidorId).maybeSingle<{ nome: string }>(),
+    supabase
+      .from("EscalaAtribuicao")
+      .select("servidorId, funcaoId, slotIndex")
+      .eq("pastoralId", pastoralId)
+      .eq("ocorrenciaId", ocorrenciaId)
+      .returns<{ servidorId: string | null; funcaoId: string | null; slotIndex: number }[]>(),
+  ]);
+  if (servidorError) throw servidorError;
+  if (existentesError) throw existentesError;
+  if ((existentes ?? []).some((a) => a.servidorId === servidorId)) {
+    throw new AvisoAoUsuario(`${servidor?.nome ?? "Essa pessoa"} já está nesta missa.`);
+  }
+
+  const semFuncao = (existentes ?? []).filter((a) => a.funcaoId === null);
+  const { error } = await supabase.from("EscalaAtribuicao").insert({
+    id: generateId(),
+    pastoralId,
+    ocorrenciaId,
+    funcaoId: null,
+    slotIndex: Math.max(0, ...semFuncao.map((a) => a.slotIndex)) + 1,
+    servidorId,
+    servidorNomeSnapshot: servidor?.nome ?? null,
+    geradoAutomaticamente: false,
+    presente: true,
+    updatedAt: nowIso(),
+  });
+  if (error) throw error;
+
+  revalidatePath(`/admin/calendario/${ocorrenciaId}`);
+  revalidatePath("/admin/presenca");
+  revalidatePath("/admin/absenteismo");
+  revalidatePath("/admin/acompanhamento");
+}
+
+export async function adicionarSemFuncao(...args: Parameters<typeof adicionarSemFuncaoInterno>) {
+  return comAvisos(() => adicionarSemFuncaoInterno(...args));
+}
+
+/** Desfaz um "Sem função" adicionado por engano na chamada. */
+async function removerSemFuncaoInterno(ocorrenciaId: string, atribuicaoId: string) {
+  const { usuario, paroquiaId, pastoralId } = await exigirPastoralParaPresenca();
+  await garantirOcorrenciaParaPresenca(usuario, ocorrenciaId, paroquiaId);
+  const { error } = await supabase
+    .from("EscalaAtribuicao")
+    .delete()
+    .eq("id", atribuicaoId)
+    .eq("pastoralId", pastoralId)
+    .eq("ocorrenciaId", ocorrenciaId)
+    .is("funcaoId", null)
+    .eq("geradoAutomaticamente", false);
+  if (error) throw error;
+
+  revalidatePath(`/admin/calendario/${ocorrenciaId}`);
+  revalidatePath("/admin/presenca");
+  revalidatePath("/admin/absenteismo");
+  revalidatePath("/admin/acompanhamento");
+}
+
+export async function removerSemFuncao(...args: Parameters<typeof removerSemFuncaoInterno>) {
+  return comAvisos(() => removerSemFuncaoInterno(...args));
 }

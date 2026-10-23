@@ -44,9 +44,9 @@ export type ServidorCandidato = {
    */
   frequenciaBaixa?: boolean;
   /**
-   * Dias (diaChave) em que o próprio servidor avisou que não pode servir
-   * (ver lib/servidorIndisponibilidade.ts) — diferente de frequenciaBaixa,
-   * isso EXCLUI o servidor de qualquer vaga nesse dia, sem exceção.
+   * Avisos do próprio servidor de que não pode servir — o dia inteiro ou só
+   * uma missa (ver chaveIndisponibilidade e lib/servidorIndisponibilidade.ts).
+   * Diferente de frequenciaBaixa, isso EXCLUI o servidor da vaga, sem exceção.
    */
   diasIndisponiveis?: Set<string>;
   /**
@@ -128,9 +128,19 @@ function podeFazer(servidor: ServidorCandidato, vaga: Pick<SlotParaPreencher, "g
   return grauCompativel(servidor, vaga.grauMinimo) && (!vaga.habilitados || vaga.habilitados.has(servidor.id));
 }
 
-/** Se o servidor não marcou o dia da vaga como indisponível (ver ServidorCandidato.diasIndisponiveis). */
+/**
+ * Chave de um aviso de indisponibilidade (ServidorIndisponibilidade.data):
+ * meia-noite = o dia inteiro (diaChave); com horário = só a missa daquele
+ * horário ("m:" + timestamp da âncora).
+ */
+export function chaveIndisponibilidade(data: Date): string {
+  return data.getUTCHours() === 0 && data.getUTCMinutes() === 0 ? diaChave(data) : `m:${data.getTime()}`;
+}
+
+/** Se o servidor não avisou que não pode no dia inteiro, nem nessa missa específica. */
 function disponivelNoDia(servidor: ServidorCandidato, data: Date): boolean {
-  return !servidor.diasIndisponiveis?.has(diaChave(data));
+  const avisos = servidor.diasIndisponiveis;
+  return !avisos?.has(diaChave(data)) && !avisos?.has(`m:${data.getTime()}`);
 }
 
 /**

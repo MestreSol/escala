@@ -107,7 +107,11 @@ export default async function EditarServidorPage({ params }: { params: Promise<{
         ) : (
           <ul className="divide-y divide-line/60 rounded-xl border border-line bg-surface">
             {diasIndisponiveis.map((dia) => {
-              const rotulo = format(paraExibicao(lerDataArmazenada(dia.data)), "EEEE, dd/MM/yyyy", { locale: ptBR });
+              const data = lerDataArmazenada(dia.data);
+              const diaInteiro = data.getUTCHours() === 0 && data.getUTCMinutes() === 0;
+              const rotulo = format(paraExibicao(data), diaInteiro ? "EEEE, dd/MM/yyyy" : "EEEE, dd/MM/yyyy 'só na missa das' HH:mm", {
+                locale: ptBR,
+              });
               return (
                 <li key={dia.id} className="flex items-center justify-between gap-3 px-4 py-3 text-sm">
                   <span className="font-medium capitalize text-fg">{rotulo}</span>

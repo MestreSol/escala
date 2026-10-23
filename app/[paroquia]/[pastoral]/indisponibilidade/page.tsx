@@ -4,10 +4,9 @@ import { ptBR } from "date-fns/locale";
 import { supabase } from "@/lib/supabase";
 import { Marca } from "@/components/ui/Marca";
 import { EscolherServidor } from "@/components/EscolherServidor";
-import { CalendarioIndisponibilidade, type DiaCalendario } from "@/components/CalendarioIndisponibilidade";
-import { diaChave } from "@/lib/scheduleGenerator";
-import { periodoDoMes, paraExibicao, lerDataArmazenada, agoraNaParoquia } from "@/lib/occurrences";
-import { getDatasIndisponiveisDoServidor } from "@/lib/servidorIndisponibilidade";
+import { CalendarioIndisponibilidade } from "@/components/CalendarioIndisponibilidade";
+import { periodoDoMes, paraExibicao, agoraNaParoquia } from "@/lib/occurrences";
+import { getDatasIndisponiveisDoServidor, montarDiasDoCalendario } from "@/lib/servidorIndisponibilidade";
 import { materializarOcorrencias } from "@/lib/materializarOcorrencias";
 import { listarMesesPublicados, primeiroDiaAberto, somarMeses } from "@/lib/escalaPublicada";
 import { pastoralPublica } from "@/lib/paroquia";
@@ -81,18 +80,6 @@ export default async function IndisponibilidadePage({
   // dias de alguém de outra pastoral trocando o id).
   const servidorId = servidores.some((s) => s.id === servidorIdParam) ? servidorIdParam : undefined;
 
-  // Horários das missas de cada dia civil do mês. A indisponibilidade é por
-  // dia, não por missa (9h30 e 18h no mesmo domingo = um único "não vou").
-  const horariosPorDia = new Map<number, string[]>();
-  for (const ocorrencia of ocorrenciasResult.data ?? []) {
-    if (!missasDaPastoral.has(ocorrencia.missaId)) continue;
-    const dataAncora = lerDataArmazenada(ocorrencia.data);
-    const horario = `${String(dataAncora.getUTCHours()).padStart(2, "0")}:${String(dataAncora.getUTCMinutes()).padStart(2, "0")}`;
-    const lista = horariosPorDia.get(dataAncora.getUTCDate()) ?? [];
-    if (!lista.includes(horario)) lista.push(horario);
-    horariosPorDia.set(dataAncora.getUTCDate(), lista.sort());
-  }
-
   const datasIndisponiveis = servidorId
     ? await getDatasIndisponiveisDoServidor(servidorId, periodoInicio, periodoFim)
     : new Set<string>();
@@ -103,18 +90,13 @@ export default async function IndisponibilidadePage({
   const proximoMes = somarMeses(mes, 1);
   const mesAtualLabel = capitalizar(format(mesReferencia, "MMMM 'de' yyyy", { locale: ptBR }));
 
-  const ano = periodoInicio.getUTCFullYear();
-  const mesIndice = periodoInicio.getUTCMonth();
-  const dias: DiaCalendario[] = Array.from({ length: periodoFim.getUTCDate() }, (_, i) => {
-    const ancora = new Date(Date.UTC(ano, mesIndice, i + 1));
-    return {
-      numero: i + 1,
-      chave: ancora.toISOString().slice(0, 10),
-      valor: ancora.toISOString(),
-      horarios: horariosPorDia.get(i + 1) ?? [],
-      marcadoInicialmente: datasIndisponiveis.has(diaChave(ancora)),
-    };
-  });
+  // Indisponibilidade por dia inteiro ou por missa (ex: só domingo de manhã).
+  const dias = montarDiasDoCalendario(
+    periodoInicio,
+    periodoFim,
+    (ocorrenciasResult.data ?? []).filter((o) => missasDaPastoral.has(o.missaId)),
+    datasIndisponiveis
+  );
   // Dias antes de `diaAberto` aparecem travados (como os que já passaram).
   const hoje = diaAberto > agoraNaParoquia().slice(0, 10) ? diaAberto : agoraNaParoquia().slice(0, 10);
 

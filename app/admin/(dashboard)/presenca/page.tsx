@@ -6,11 +6,16 @@ import { PresencaSelect } from "@/components/admin/PresencaSelect";
 import { EditarContatoModal } from "@/components/admin/EditarContatoModal";
 import { ChamadaTodos, type ItemChamada } from "@/components/admin/ChamadaTodos";
 import { getConfigMissasMap } from "@/lib/missaPastoral";
+import { chaveIndisponibilidade, diaChave } from "@/lib/scheduleGenerator";
 import { materializarOcorrencias } from "@/lib/materializarOcorrencias";
 import { formatarTelefone } from "@/lib/telefone";
 import { intervaloDeHojeNaParoquia, lerDataArmazenada, paraExibicao } from "@/lib/occurrences";
 import type { EscalaAtribuicaoRow, FuncaoRow, MissaOcorrenciaRow, MissaRow, ServidorRow } from "@/lib/types";
-import { registrarPresencaTodosAtivos, salvarChamadaTodos } from "../calendario/actions";
+import { adicionarSemFuncao, registrarPresencaTodosAtivos, removerSemFuncao, salvarChamadaTodos } from "../calendario/actions";
+import { ActionForm } from "@/components/ui/ActionForm";
+import { SubmitButton } from "@/components/ui/SubmitButton";
+import { SearchableSelect } from "@/components/ui/SearchableSelect";
+import { DeleteButton } from "@/components/admin/DeleteButton";
 import { salvarContatos, salvarFoto } from "../contatos/actions";
 
 export const dynamic = "force-dynamic";
@@ -42,16 +47,26 @@ export default async function PresencaDoDiaPage() {
       .returns<ServidorDaChamada[]>(),
     supabase
       .from("ServidorIndisponibilidade")
-      .select("servidorId, servidor:Servidor!inner(pastoralId)")
+      .select("servidorId, data, servidor:Servidor!inner(pastoralId)")
       .eq("servidor.pastoralId", pastoral.id)
       .gte("data", inicio.toISOString())
       .lte("data", fim.toISOString())
-      .returns<{ servidorId: string }[]>(),
+      .returns<{ servidorId: string; data: string }[]>(),
   ]);
   if (servidoresResult.error) throw servidoresResult.error;
   if (indisponiveisResult.error) throw indisponiveisResult.error;
   const servidoresAtivos = servidoresResult.data ?? [];
-  const avisaramHoje = new Set((indisponiveisResult.data ?? []).map((i) => i.servidorId));
+  // Aviso de hoje: o dia inteiro ou só uma missa (ver chaveIndisponibilidade).
+  const avisosDeHoje = new Map<string, Set<string>>();
+  for (const aviso of indisponiveisResult.data ?? []) {
+    const chaves = avisosDeHoje.get(aviso.servidorId) ?? new Set<string>();
+    chaves.add(chaveIndisponibilidade(lerDataArmazenada(aviso.data)));
+    avisosDeHoje.set(aviso.servidorId, chaves);
+  }
+  const avisouPraMissa = (servidorId: string, dataMissa: Date) => {
+    const chaves = avisosDeHoje.get(servidorId);
+    return Boolean(chaves && (chaves.has(diaChave(dataMissa)) || chaves.has(`m:${dataMissa.getTime()}`)));
+  };
 
   const { data, error } = await supabase
     .from("MissaOcorrencia")
@@ -98,7 +113,7 @@ export default async function PresencaDoDiaPage() {
           fotoUrl: servidor.fotoUrl,
           presenteSalvo,
           travado: presenteSalvo === true && !podeCorrigir,
-          avisouIndisponivel: avisaramHoje.has(servidor.id),
+          avisouIndisponivel: avisouPraMissa(servidor.id, lerDataArmazenada(ocorrencia.data)),
           editar: (
             <EditarContatoModal
               nome={servidor.nome}
@@ -164,7 +179,11 @@ export default async function PresencaDoDiaPage() {
                             {atribuicao.servidorNomeSnapshot ?? atribuicao.servidor?.nome ?? "—"}
                           </p>
                           <div className="flex items-center gap-2 text-xs text-muted">
-                            {atribuicao.funcao ? <span>{atribuicao.funcao.nome}</span> : null}
+                            {atribuicao.funcao ? (
+                              <span>{atribuicao.funcao.nome}</span>
+                            ) : (
+                              <span className="italic text-subtle">Sem função</span>
+                            )}
                             {atribuicao.servidor && atribuicao.servidorId ? (
                               <EditarContatoModal
                                 nome={atribuicao.servidor.nome}
@@ -178,11 +197,42 @@ export default async function PresencaDoDiaPage() {
                           </div>
                         </div>
                       </div>
-                      <PresencaSelect action={salvarPresenca} defaultValue={atribuicao.presente} podeCorrigir={podeCorrigir} />
+                      <div className="flex items-center gap-3">
+                        {atribuicao.funcaoId === null && !atribuicao.geradoAutomaticamente ? (
+                          <DeleteButton
+                            action={removerSemFuncao.bind(null, ocorrencia.id, atribuicao.id)}
+                            confirmMessage={`Tirar ${atribuicao.servidorNomeSnapshot ?? atribuicao.servidor?.nome ?? "esta pessoa"} desta missa?`}
+                            label="Remover"
+                            successMessage="Removido da missa."
+                          />
+                        ) : null}
+                        <PresencaSelect action={salvarPresenca} defaultValue={atribuicao.presente} podeCorrigir={podeCorrigir} />
+                      </div>
                     </li>
                   );
                 })}
               </ul>
+              )}
+              {ocorrencia.todos ? null : (
+                <ActionForm
+                  action={adicionarSemFuncao.bind(null, ocorrencia.id)}
+                  successMessage="Presença registrada (sem função)."
+                  className="flex flex-wrap items-center gap-2 border-t border-line px-4 py-3"
+                >
+                  <div className="min-w-0 flex-1">
+                    <SearchableSelect
+                      name="servidorId"
+                      placeholder="Serviu sem estar na escala? Digite o nome..."
+                      options={servidoresAtivos
+                        .filter((s) => !ocorrencia.atribuicoes.some((a) => a.servidorId === s.id))
+                        .sort((x, y) => x.nome.localeCompare(y.nome, "pt-BR"))
+                        .map((s) => ({ value: s.id, label: s.nome }))}
+                    />
+                  </div>
+                  <SubmitButton variant="secondary" className="shrink-0" pendingLabel="Adicionando">
+                    Adicionar sem função
+                  </SubmitButton>
+                </ActionForm>
               )}
             </section>
           ))}

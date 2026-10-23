@@ -4,12 +4,11 @@ import { ptBR } from "date-fns/locale";
 import { supabase } from "@/lib/supabase";
 import { pastoralDoPainel } from "@/lib/sessao";
 import { EscolherServidor } from "@/components/EscolherServidor";
-import { CalendarioIndisponibilidade, type DiaCalendario } from "@/components/CalendarioIndisponibilidade";
+import { CalendarioIndisponibilidade } from "@/components/CalendarioIndisponibilidade";
 import { ActionForm } from "@/components/ui/ActionForm";
 import { SubmitButton } from "@/components/ui/SubmitButton";
-import { diaChave } from "@/lib/scheduleGenerator";
 import { agoraNaParoquia, formatarDiaMissa, lerDataArmazenada, paraExibicao, periodoDoMes } from "@/lib/occurrences";
-import { getDatasIndisponiveisDoServidor } from "@/lib/servidorIndisponibilidade";
+import { getDatasIndisponiveisDoServidor, montarDiasDoCalendario } from "@/lib/servidorIndisponibilidade";
 import { materializarOcorrencias } from "@/lib/materializarOcorrencias";
 import { somarMeses } from "@/lib/escalaPublicada";
 import { getMissasDaPastoral, listarMissasDePreferencia } from "@/lib/missaPastoral";
@@ -109,28 +108,12 @@ export default async function DisponibilidadePage({
 
   const preferidas = new Set((preferenciasResult.data ?? []).map((p) => p.missaId));
 
-  const horariosPorDia = new Map<number, string[]>();
-  for (const ocorrencia of ocorrenciasResult.data ?? []) {
-    if (!missasDaPastoral.has(ocorrencia.missaId)) continue;
-    const ancora = lerDataArmazenada(ocorrencia.data);
-    const horario = `${String(ancora.getUTCHours()).padStart(2, "0")}:${String(ancora.getUTCMinutes()).padStart(2, "0")}`;
-    const lista = horariosPorDia.get(ancora.getUTCDate()) ?? [];
-    if (!lista.includes(horario)) lista.push(horario);
-    horariosPorDia.set(ancora.getUTCDate(), lista.sort());
-  }
-
-  const ano = periodoInicio.getUTCFullYear();
-  const mesIndice = periodoInicio.getUTCMonth();
-  const dias: DiaCalendario[] = Array.from({ length: periodoFim.getUTCDate() }, (_, i) => {
-    const ancora = new Date(Date.UTC(ano, mesIndice, i + 1));
-    return {
-      numero: i + 1,
-      chave: ancora.toISOString().slice(0, 10),
-      valor: ancora.toISOString(),
-      horarios: horariosPorDia.get(i + 1) ?? [],
-      marcadoInicialmente: datasIndisponiveis.has(diaChave(ancora)),
-    };
-  });
+  const dias = montarDiasDoCalendario(
+    periodoInicio,
+    periodoFim,
+    (ocorrenciasResult.data ?? []).filter((o) => missasDaPastoral.has(o.missaId)),
+    datasIndisponiveis
+  );
 
   const diasEscalado = [
     ...new Set(
