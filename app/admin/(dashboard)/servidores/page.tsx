@@ -5,7 +5,9 @@ import { Badge } from "@/components/ui/Badge";
 import { DeleteButton } from "@/components/admin/DeleteButton";
 import { GRAU_LABEL, GRAU_ORDEM, usaGraus } from "@/lib/constants";
 import { DataTable } from "@/components/ui/DataTable";
-import { lerDataArmazenada } from "@/lib/occurrences";
+import { formatarDiaMissa, lerDataArmazenada } from "@/lib/occurrences";
+import { listarMissasDePreferencia } from "@/lib/missaPastoral";
+import { getHabilitadosMap } from "@/lib/funcaoHabilitado";
 import { calcularIdade } from "@/lib/idade";
 import type { ServidorMissaPreferenciaRow, ServidorRow } from "@/lib/types";
 import { ActionForm } from "@/components/ui/ActionForm";
@@ -22,11 +24,23 @@ export const dynamic = "force-dynamic";
 export default async function ServidoresPage({
   searchParams,
 }: {
-  searchParams: Promise<{ nome?: string; comunidade?: string; categoria?: string; situacao?: string }>;
+  searchParams: Promise<{
+    nome?: string;
+    comunidade?: string;
+    categoria?: string;
+    situacao?: string;
+    missa?: string;
+    experiencia?: string;
+    falta?: string;
+    funcao?: string;
+    idadeMin?: string;
+    idadeMax?: string;
+  }>;
 }) {
-  const { nome, comunidade, categoria, situacao } = await searchParams;
+  const { nome, comunidade, categoria, situacao, missa, experiencia, falta, funcao, idadeMin, idadeMax } =
+    await searchParams;
   const verInativos = situacao === "inativos";
-  const { pastoral } = await pastoralDoPainel();
+  const { paroquia, pastoral } = await pastoralDoPainel();
   const comGraus = usaGraus(pastoral.tipo);
 
   let query = supabase
@@ -38,12 +52,45 @@ export default async function ServidoresPage({
   if (nome?.trim()) query = query.ilike("nome", `%${nome.trim()}%`);
   if (comunidade) query = query.ilike("comunidade", `%${comunidade}%`);
   if (categoria && comGraus) query = query.eq("categoria", categoria);
+  if (experiencia === "experientes") query = query.eq("experiente", true);
+  if (experiencia === "iniciantes") query = query.eq("experiente", false);
+  if (falta === "foto") query = query.is("fotoUrl", null);
+  if (falta === "celular") query = query.is("celular", null).is("celularResponsavel", null);
+  if (falta === "nascimento") query = query.is("dataNascimento", null);
 
-  const { data, error } = await query.returns<
-    (ServidorRow & { preferenciasMissas: ServidorMissaPreferenciaRow[] })[]
-  >();
+  const [{ data, error }, missas, habilitadosPorFuncao, funcoesResult] = await Promise.all([
+    query.returns<(ServidorRow & { preferenciasMissas: ServidorMissaPreferenciaRow[] })[]>(),
+    listarMissasDePreferencia(paroquia.id, pastoral.id),
+    getHabilitadosMap(pastoral.id),
+    supabase
+      .from("Funcao")
+      .select("id, nome")
+      .eq("pastoralId", pastoral.id)
+      .eq("somenteHabilitados", true)
+      .eq("ativo", true)
+      .order("nome", { ascending: true })
+      .returns<{ id: string; nome: string }[]>(),
+  ]);
   if (error) throw error;
-  const servidores = data ?? [];
+  if (funcoesResult.error) throw funcoesResult.error;
+  const funcoesRestritas = funcoesResult.data ?? [];
+
+  const idadeMinima = idadeMin ? Number(idadeMin) : null;
+  const idadeMaxima = idadeMax ? Number(idadeMax) : null;
+  const habilitadosDaFuncao = funcao ? habilitadosPorFuncao.get(funcao) : undefined;
+  const servidores = (data ?? []).filter((servidor) => {
+    if (missa && !servidor.preferenciasMissas.some((p) => p.missaId === missa)) return false;
+    if (falta === "missas" && servidor.preferenciasMissas.length > 0) return false;
+    if (funcao && !habilitadosDaFuncao?.has(servidor.id)) return false;
+    if (idadeMinima !== null || idadeMaxima !== null) {
+      if (!servidor.dataNascimento) return false;
+      const idade = calcularIdade(lerDataArmazenada(servidor.dataNascimento));
+      if (idadeMinima !== null && idade < idadeMinima) return false;
+      if (idadeMaxima !== null && idade > idadeMaxima) return false;
+    }
+    return true;
+  });
+  const filtrando = Boolean(nome || comunidade || categoria || verInativos || missa || experiencia || falta || funcao || idadeMin || idadeMax);
 
   return (
     <div>
@@ -99,13 +146,62 @@ export default async function ServidoresPage({
             <option value="inativos">Inativos</option>
           </select>
         </div>
+        <div>
+          <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-muted">Missa que pode servir</label>
+          <select name="missa" defaultValue={missa ?? ""} className="rounded-md border border-line bg-surface px-3 py-1.5 text-sm text-fg focus:border-accent focus:outline-none max-w-64">
+            <option value="">Todas</option>
+            {missas.map((m) => (
+              <option key={m.id} value={m.id}>
+                {formatarDiaMissa(m)} {m.horario} — {m.comunidade}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-muted">Experiência</label>
+          <select name="experiencia" defaultValue={experiencia ?? ""} className="rounded-md border border-line bg-surface px-3 py-1.5 text-sm text-fg focus:border-accent focus:outline-none">
+            <option value="">Todos</option>
+            <option value="experientes">Experientes</option>
+            <option value="iniciantes">Iniciantes</option>
+          </select>
+        </div>
+        <div>
+          <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-muted">Falta no cadastro</label>
+          <select name="falta" defaultValue={falta ?? ""} className="rounded-md border border-line bg-surface px-3 py-1.5 text-sm text-fg focus:border-accent focus:outline-none">
+            <option value="">—</option>
+            <option value="foto">Sem foto</option>
+            <option value="celular">Sem nenhum celular</option>
+            <option value="nascimento">Sem data de nascimento</option>
+            <option value="missas">Sem missa marcada</option>
+          </select>
+        </div>
+        {funcoesRestritas.length > 0 ? (
+          <div>
+            <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-muted">Pode fazer</label>
+            <select name="funcao" defaultValue={funcao ?? ""} className="rounded-md border border-line bg-surface px-3 py-1.5 text-sm text-fg focus:border-accent focus:outline-none">
+              <option value="">Qualquer função</option>
+              {funcoesRestritas.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.nome}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : null}
+        <div>
+          <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-muted">Idade</label>
+          <div className="flex items-center gap-1.5">
+            <input type="number" name="idadeMin" min={0} max={99} defaultValue={idadeMin} placeholder="de" className="rounded-md border border-line bg-surface px-3 py-1.5 text-sm text-fg focus:border-accent focus:outline-none w-16" />
+            <input type="number" name="idadeMax" min={0} max={99} defaultValue={idadeMax} placeholder="até" className="rounded-md border border-line bg-surface px-3 py-1.5 text-sm text-fg focus:border-accent focus:outline-none w-16" />
+          </div>
+        </div>
         <button
           type="submit"
           className="rounded-md border border-line bg-surface-2 px-3 py-1.5 text-sm font-medium text-fg transition-colors hover:border-line-strong hover:bg-line"
         >
           Pesquisar
         </button>
-        {nome || comunidade || categoria || verInativos ? (
+        {filtrando ? (
           <Link href="/admin/servidores" className="py-1.5 text-sm text-muted transition-colors hover:text-fg">
             Limpar
           </Link>
