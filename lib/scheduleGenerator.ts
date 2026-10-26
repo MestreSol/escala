@@ -207,9 +207,10 @@ function agruparPorOcorrencia(slots: SlotParaPreencher[]): Map<string, SlotParaP
 const chaveVaga = (funcaoId: string, slotIndex: number) => `${funcaoId}:${slotIndex}`;
 
 /**
- * Qual vaga faz dupla com qual, dentro de uma ocorrência. Primeiro as vagas
- * da mesma função (#1 com #2, #3 com #4...); depois os pares de funções
- * diferentes (#N de uma com #N da outra), só entre vagas ainda sem dupla.
+ * Qual vaga faz dupla com qual, dentro de uma ocorrência: só os pares de
+ * funções configurados (`paresDeFuncoes`, ex: Turiferário + Naveteiro), #N de
+ * uma com #N da outra. Vagas da mesma função (ex: Ceroferário #1 e #2) não
+ * formam dupla — não precisam de um experiente.
  */
 function montarDuplas(
   vagasPorFuncao: Map<string, number[]>,
@@ -220,12 +221,6 @@ function montarDuplas(
     parceiro.set(a, b);
     parceiro.set(b, a);
   };
-
-  for (const [funcaoId, indices] of vagasPorFuncao) {
-    for (let i = 0; i + 1 < indices.length; i += 2) {
-      ligar(chaveVaga(funcaoId, indices[i]), chaveVaga(funcaoId, indices[i + 1]));
-    }
-  }
 
   for (const [funcaoA, funcaoB] of paresDeFuncoes) {
     const livresA = (vagasPorFuncao.get(funcaoA) ?? []).map((i) => chaveVaga(funcaoA, i)).filter((k) => !parceiro.has(k));
@@ -315,13 +310,17 @@ function montarUnidades(slots: SlotParaPreencher[], funcoesAtomicas: Set<string>
  * de prioridade: só é escolhido quando não sobra mais ninguém com frequência
  * normal disputando a mesma vaga.
  *
- * Vagas em dupla (mesma função com 2+ vagas, ou pares de `paresDeFuncoes`)
+ * Vagas dos pares de funções (`paresDeFuncoes`, ex: Turiferário + Naveteiro)
  * juntam um experiente com um inexperiente (`ServidorCandidato.experiente`):
  * sem inexperiente disponível vão dois experientes, mas nunca uma dupla só
  * de inexperientes — aí a vaga fica em aberto. A regra só vale enquanto
  * houver experientes E inexperientes entre os servidores (ninguém marcado, ou
- * todos experientes, = sem efeito). O pré-passo de vínculos (irmãos) não
- * olha experiência; as vagas parceiras dele se ajustam depois.
+ * todos experientes, = sem efeito). O pré-passo de vínculos (irmãos) também
+ * respeita a regra (ver `alocarGrupo`).
+ *
+ * Grau mais próximo primeiro: numa função de coroinha, coroinhas têm
+ * preferência sobre acólitos (e acólitos sobre cerimoniários) — o grau acima
+ * só entra se não sobrar ninguém do grau da função.
  *
  * Dias que o próprio servidor avisou como indisponível (`diasIndisponiveis`,
  * ver lib/servidorIndisponibilidade.ts — tela pública onde ele marca isso)
@@ -341,7 +340,9 @@ function alocarGrupo(
   membros: ServidorCandidato[],
   vagas: SlotParaPreencher[],
   ultimaFuncao: Map<string, string>,
-  random: () => number
+  random: () => number,
+  /** Custo a mais de uma alocação completa (ex: dupla só de inexperientes). */
+  custoExtra: (alocacao: SlotParaPreencher[]) => number = () => 0
 ): Map<string, SlotParaPreencher> | null {
   const sorteio = new Map(vagas.map((v) => [v, random()]));
   let melhor: { custo: number; alocacao: SlotParaPreencher[] } | null = null;
@@ -355,9 +356,11 @@ function alocarGrupo(
       if (funcoes.has(vaga.funcaoId)) custo += 1000;
       funcoes.add(vaga.funcaoId);
       if (ultimaFuncao.get(membros[i].id) === vaga.funcaoId) custo += 100;
+      // Grau acima do necessário (ex: acólito em função de coroinha) só se não tiver jeito.
+      custo += (GRAU_ORDEM[membros[i].categoria] - GRAU_ORDEM[vaga.grauMinimo]) * 10;
       custo += sorteio.get(vaga) ?? 0;
     });
-    return custo;
+    return custo + custoExtra(alocacao);
   }
 
   function buscar(i: number) {
@@ -439,6 +442,11 @@ export function gerarEscala(
     // frequência normal disputando a mesma vaga (ver ServidorCandidato.frequenciaBaixa).
     const semFrequenciaBaixa = grupoEscolha.filter((c) => !c.frequenciaBaixa);
     grupoEscolha = semFrequenciaBaixa.length > 0 ? semFrequenciaBaixa : grupoEscolha;
+
+    // Grau mais próximo do exigido: todos aqui já alcançam o grau da função,
+    // então o menor grau é o da função (ex: coroinha antes de acólito).
+    const menorGrau = Math.min(...grupoEscolha.map((c) => GRAU_ORDEM[c.categoria]));
+    grupoEscolha = grupoEscolha.filter((c) => GRAU_ORDEM[c.categoria] === menorGrau);
 
     const menorContagem = Math.min(...grupoEscolha.map((c) => contagemTotal.get(c.id) ?? 0));
     const empatados = grupoEscolha.filter((c) => (contagemTotal.get(c.id) ?? 0) === menorContagem);
@@ -559,11 +567,26 @@ export function gerarEscala(
           continue;
         }
 
+        // Dupla de função em par só de inexperientes (ver ajustarPelaExperiencia):
+        // o parceiro pode ser outro do grupo ou alguém já escalado na vaga.
+        const duplaSemExperiente = (alocacao: SlotParaPreencher[]) => {
+          let custo = 0;
+          alocacao.forEach((vaga, i) => {
+            const parceiro = parceiroDaVaga.get(chaveVaga(vaga.funcaoId, vaga.slotIndex));
+            if (!parceiro || membros[i].experiente) return;
+            const j = alocacao.findIndex((v) => chaveVaga(v.funcaoId, v.slotIndex) === parceiro);
+            const outro = j >= 0 ? membros[j] : servidorPorId.get(ocupantePorVaga.get(parceiro) ?? "");
+            if (outro && !outro.experiente) custo += 5000;
+          });
+          return custo;
+        };
+
         const alocacao = alocarGrupo(
           membros,
           unidades.filter((u) => !u.atomica).flatMap((u) => u.slots),
           ultimaFuncao,
-          random
+          random,
+          duplaSemExperiente
         );
 
         if (!alocacao) {

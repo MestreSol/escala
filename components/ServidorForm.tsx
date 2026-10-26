@@ -158,7 +158,7 @@ export function ServidorForm({
           <span>
             <span className="block font-medium text-fg">Experiente</span>
             <span className="block text-xs text-muted">
-              Nas funções em dupla ou em par, a escala junta sempre um experiente com um inexperiente.
+              Nas funções em par (ex: Turiferário + Naveteiro), a escala junta sempre um experiente com um inexperiente.
             </span>
           </span>
         </label>

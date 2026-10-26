@@ -152,7 +152,7 @@ export default async function EditarFuncaoPage({ params }: { params: Promise<{ i
         <p className="mb-4 text-sm text-muted">
           Marque as funções que trabalham junto com <strong>{funcao.nome}</strong> na missa (ex: Turiferário e
           Naveteiro). Na escala, o par sempre junta um servidor <strong>experiente</strong> com um inexperiente —
-          a mesma regra das funções com 2 ou mais vagas, como o Ceroferário.
+          vagas da mesma função (ex: Ceroferário #1 e #2) não precisam disso.
         </p>
 
         {outrasFuncoes.length === 0 ? (
