@@ -24,6 +24,7 @@ function parseFuncaoForm(formData: FormData, tipo: TipoPastoral) {
     grauMinimo: usaGraus(tipo) ? formData.get("grauMinimo") : GRAU_UNICO,
     quantidadePadrao: formData.get("quantidadePadrao"),
     exigeGrupoCompleto: formData.get("exigeGrupoCompleto") === "on",
+    preferirGrauMinimo: usaGraus(tipo) && formData.get("preferirGrauMinimo") === "on",
   });
 }
 

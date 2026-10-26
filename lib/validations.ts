@@ -18,6 +18,7 @@ export const funcaoSchema = z.object({
   grauMinimo: z.enum(["COROINHA", "ACOLITO", "CERIMONIARIO"]),
   quantidadePadrao: z.coerce.number().int().min(1).max(20).default(1),
   exigeGrupoCompleto: z.coerce.boolean().default(false),
+  preferirGrauMinimo: z.coerce.boolean().default(false),
 });
 
 const missaCamposComuns = {

@@ -146,6 +146,9 @@ model Funcao {
   /// Se true, só os servidores escolhidos em FuncaoHabilitado podem exercer
   /// esta função (ex: uma função que só alguns coroinhas sabem fazer).
   somenteHabilitados Boolean    @default(false)
+  /// Se true, quem tem exatamente o grau mínimo tem preferência (ex: só
+  /// coroinha no Ceroferário Pequeno); grau acima só entra se faltar gente.
+  preferirGrauMinimo Boolean    @default(false)
   ativo              Boolean    @default(true)
   createdAt          DateTime   @default(now())
   updatedAt          DateTime   @updatedAt

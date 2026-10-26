@@ -63,6 +63,8 @@ export type FuncaoRow = {
   exigeGrupoCompleto: boolean;
   /** Só quem está em FuncaoHabilitado pode exercer (ver lib/funcaoHabilitado.ts). */
   somenteHabilitados: boolean;
+  /** Grau exato da função tem preferência (ver SlotParaPreencher.preferirGrauMinimo). */
+  preferirGrauMinimo: boolean;
   ativo: boolean;
   createdAt: string;
   updatedAt: string;

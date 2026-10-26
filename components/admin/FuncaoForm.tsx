@@ -15,6 +15,7 @@ type FuncaoFormProps = {
     grauMinimo: string;
     quantidadePadrao: number;
     exigeGrupoCompleto: boolean;
+    preferirGrauMinimo?: boolean;
   };
   submitLabel: string;
   /** Pastoral com hierarquia (coroinhas). Sem ela (ex: ministros), o campo de grau some. */
@@ -85,6 +86,21 @@ export function FuncaoForm({ action, defaultValues, submitLabel, usaGraus }: Fun
           Se marcado, as vagas dessa função só são preenchidas se houver gente para todas ao mesmo
           tempo; senão, todas ficam em aberto (ex: Ceroferário sempre anda em dupla — não faz
           sentido escalar só 1 dos 2).
+        </p>
+      </div>
+      <div hidden={!usaGraus}>
+        <label className="flex items-center gap-2 text-sm text-fg">
+          <input
+            type="checkbox"
+            name="preferirGrauMinimo"
+            defaultChecked={defaultValues?.preferirGrauMinimo ?? false}
+            className="h-4 w-4 rounded border-line-strong"
+          />
+          Preferir só quem tem exatamente o grau mínimo
+        </label>
+        <p className="mt-1 text-xs text-muted">
+          Para funções em que um grau acima fica estranho (ex: Ceroferário Pequeno só com coroinhas). A escala
+          só usa um grau acima se não sobrar ninguém do grau mínimo.
         </p>
       </div>
       <FieldError>{state.error}</FieldError>

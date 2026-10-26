@@ -127,6 +127,7 @@ async function montarSlotsEmAberto(paroquiaId: string, pastoralId: string, perio
           modoEscalacao,
           comunidadeResponsavel: config.comunidadeResponsavel ?? undefined,
           habilitados: habilitadosPorFuncao.get(req.funcaoId),
+          preferirGrauMinimo: req.funcao.preferirGrauMinimo,
         });
       }
     }

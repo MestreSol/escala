@@ -30,6 +30,11 @@ export type SlotParaPreencher = {
    * ocupar a vaga. Ausente = qualquer um com o grau mínimo.
    */
   habilitados?: Set<string>;
+  /**
+   * Função em que um grau acima fica estranho (Funcao.preferirGrauMinimo, ex:
+   * Ceroferário Pequeno): quem tem exatamente o grau mínimo tem preferência.
+   */
+  preferirGrauMinimo?: boolean;
 };
 
 export type ServidorCandidato = {
@@ -318,9 +323,9 @@ function montarUnidades(slots: SlotParaPreencher[], funcoesAtomicas: Set<string>
  * todos experientes, = sem efeito). O pré-passo de vínculos (irmãos) também
  * respeita a regra (ver `alocarGrupo`).
  *
- * Grau mais próximo primeiro: numa função de coroinha, coroinhas têm
- * preferência sobre acólitos (e acólitos sobre cerimoniários) — o grau acima
- * só entra se não sobrar ninguém do grau da função.
+ * Funções com `preferirGrauMinimo` (ex: Ceroferário Pequeno) dão preferência a
+ * quem tem exatamente o grau mínimo — o grau acima só entra se não sobrar
+ * ninguém do grau da função. Nas outras, todo grau compatível entra no rodízio.
  *
  * Dias que o próprio servidor avisou como indisponível (`diasIndisponiveis`,
  * ver lib/servidorIndisponibilidade.ts — tela pública onde ele marca isso)
@@ -356,8 +361,8 @@ function alocarGrupo(
       if (funcoes.has(vaga.funcaoId)) custo += 1000;
       funcoes.add(vaga.funcaoId);
       if (ultimaFuncao.get(membros[i].id) === vaga.funcaoId) custo += 100;
-      // Grau acima do necessário (ex: acólito em função de coroinha) só se não tiver jeito.
-      custo += (GRAU_ORDEM[membros[i].categoria] - GRAU_ORDEM[vaga.grauMinimo]) * 10;
+      // Grau acima do necessário numa função que prefere o grau mínimo, só se não tiver jeito.
+      if (vaga.preferirGrauMinimo) custo += (GRAU_ORDEM[membros[i].categoria] - GRAU_ORDEM[vaga.grauMinimo]) * 300;
       custo += sorteio.get(vaga) ?? 0;
     });
     return custo + custoExtra(alocacao);
@@ -434,8 +439,8 @@ export function gerarEscala(
 
   const resultado: AtribuicaoGerada[] = [];
 
-  function escolherVencedor(candidatos: ServidorCandidato[], funcaoId: string): ServidorCandidato {
-    const semRepeticao = candidatos.filter((c) => ultimaFuncao.get(c.id) !== funcaoId);
+  function escolherVencedor(candidatos: ServidorCandidato[], slot: SlotParaPreencher): ServidorCandidato {
+    const semRepeticao = candidatos.filter((c) => ultimaFuncao.get(c.id) !== slot.funcaoId);
     let grupoEscolha = semRepeticao.length > 0 ? semRepeticao : candidatos;
 
     // Quem tem frequência baixa só é escolhido se não sobrar ninguém com
@@ -443,10 +448,12 @@ export function gerarEscala(
     const semFrequenciaBaixa = grupoEscolha.filter((c) => !c.frequenciaBaixa);
     grupoEscolha = semFrequenciaBaixa.length > 0 ? semFrequenciaBaixa : grupoEscolha;
 
-    // Grau mais próximo do exigido: todos aqui já alcançam o grau da função,
-    // então o menor grau é o da função (ex: coroinha antes de acólito).
-    const menorGrau = Math.min(...grupoEscolha.map((c) => GRAU_ORDEM[c.categoria]));
-    grupoEscolha = grupoEscolha.filter((c) => GRAU_ORDEM[c.categoria] === menorGrau);
+    // Função que prefere o grau mínimo: todos aqui já alcançam o grau da
+    // função, então o menor grau presente é o mais próximo (coroinha antes de acólito).
+    if (slot.preferirGrauMinimo) {
+      const menorGrau = Math.min(...grupoEscolha.map((c) => GRAU_ORDEM[c.categoria]));
+      grupoEscolha = grupoEscolha.filter((c) => GRAU_ORDEM[c.categoria] === menorGrau);
+    }
 
     const menorContagem = Math.min(...grupoEscolha.map((c) => contagemTotal.get(c.id) ?? 0));
     const empatados = grupoEscolha.filter((c) => (contagemTotal.get(c.id) ?? 0) === menorContagem);
@@ -641,7 +648,7 @@ export function gerarEscala(
             continue;
           }
 
-          const vencedor = escolherVencedor(candidatos, slot.funcaoId);
+          const vencedor = escolherVencedor(candidatos, slot);
 
           resultado.push({
             ocorrenciaId: slot.ocorrenciaId,
@@ -689,7 +696,7 @@ export function gerarEscala(
       for (const slot of unidade.slots) {
         const candidatos = ajustarPelaExperiencia(poolDisponivel, slot);
         if (candidatos.length === 0) break;
-        const vencedor = escolherVencedor(candidatos, slot.funcaoId);
+        const vencedor = escolherVencedor(candidatos, slot);
         escolhidos.push({ slot, servidor: vencedor });
         ocupantePorVaga.set(chaveVaga(slot.funcaoId, slot.slotIndex), vencedor.id);
         poolDisponivel.splice(
