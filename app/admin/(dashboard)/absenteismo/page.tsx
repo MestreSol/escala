@@ -5,6 +5,8 @@ import { supabase } from "@/lib/supabase";
 import { pastoralDoPainel } from "@/lib/sessao";
 import { Badge } from "@/components/ui/Badge";
 import { DataTable } from "@/components/ui/DataTable";
+import { DeleteButton } from "@/components/admin/DeleteButton";
+import { removerTodasAsFaltas } from "./actions";
 import { TelefoneLink } from "@/components/admin/TelefoneLink";
 import { agoraNaParoquia, lerDataArmazenada, paraExibicao } from "@/lib/occurrences";
 import { LIMIAR_FREQUENCIA, MINIMO_REGISTROS_FREQUENCIA } from "@/lib/frequencia";
@@ -243,6 +245,7 @@ export default async function AbsenteismoPage({ searchParams }: { searchParams: 
             { chave: "seguidas", titulo: "Faltas seguidas", ordenavel: true, alinhar: "right" },
             { chave: "ultima", titulo: "Última falta", ordenavel: true },
             { chave: "contato", titulo: "Contato" },
+            { chave: "acoes", titulo: "", alinhar: "right" },
           ]}
           linhas={[...resumos.entries()]
             .filter(([, r]) => r.presencas + r.faltas > 0)
@@ -307,6 +310,15 @@ export default async function AbsenteismoPage({ searchParams }: { searchParams: 
                     <span className="text-subtle">—</span>
                   ),
                   contato: <TelefoneLink digitos={servidor?.celularResponsavel ?? servidor?.celular ?? null} />,
+                  acoes:
+                    r.faltas > 0 ? (
+                      <DeleteButton
+                        action={removerTodasAsFaltas.bind(null, servidorId)}
+                        confirmMessage={`Reiniciar as faltas de ${servidor?.nome ?? "este servidor"}? Todas as faltas dele (não só as deste período) voltam pra "não registrada" e deixam de contar no absenteísmo e no sorteio da escala.`}
+                        label="Reiniciar faltas"
+                        successMessage="Faltas reiniciadas."
+                      />
+                    ) : null,
                 },
               };
             })}
